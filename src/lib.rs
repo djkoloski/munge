@@ -163,8 +163,7 @@ macro_rules! munge {
             // SAFETY: None of this can ever be executed.
             unsafe {
                 ::core::hint::unreachable_unchecked();
-                let inner_ref = $value.deref();
-                let $($tokens)+ = ::core::ptr::read(inner_ref).assume_init();
+                let $($tokens)+ = &mut ::core::ptr::read($value.as_ptr());
             }
         }
     };

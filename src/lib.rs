@@ -1,14 +1,19 @@
-//! `munge` makes it easy to initialize `MaybeUninit`s.
+//! `munge` makes it easy and safe to destructure raw pointers, `MaybeUninit`s, `Cell`s, and `Pin`s.
 //!
-//! Just use the `munge!` macro to destructure `MaybeUninit`s the same way you'd destructure a
-//! value. Initialize all the fields, then call `assume_init` to unwrap it.
+//! Just use the `munge!` macro to destructure opaque types the same way you'd destructure a value.
 //!
 //! `munge` has no features and is always `#![no_std]`.
 //!
-//! ## Example
+//! ## Examples
 //!
-//! ```
-//! # use { ::core::mem::MaybeUninit, ::munge::munge };
+//! `munge` makes it easy to initialize `MaybeUninit`s:
+//!
+//! ```rust
+//! use {
+//!     ::core::mem::MaybeUninit,
+//!     ::munge::munge,
+//! };
+//!
 //! pub struct Example {
 //!     a: u32,
 //!     b: (char, f32),
@@ -16,7 +21,7 @@
 //!
 //! let mut mu = MaybeUninit::<Example>::uninit();
 //!
-//! munge!(let Example { a, b: (c, mut f) } = mu);
+//! munge!(let Example { a, b: (c, mut f) } = &mut mu);
 //! assert_eq!(a.write(10), &10);
 //! assert_eq!(c.write('x'), &'x');
 //! assert_eq!(f.write(3.14), &3.14);
@@ -28,6 +33,77 @@
 //! assert_eq!(init.b.0, 'x');
 //! assert_eq!(init.b.1, 3.14);
 //! ```
+//!
+//! It can also be used to destructure `Cell`s:
+//!
+//! ```rust
+//! use {
+//!     ::core::cell::Cell,
+//!     ::munge::munge,
+//! };
+//!
+//! pub struct Example {
+//!     a: u32,
+//!     b: (char, f32),
+//! }
+//!
+//! let value = Example {
+//!     a: 10,
+//!     b: ('x', 3.14),
+//! };
+//! let cell = Cell::<Example>::new(value);
+//!
+//! munge!(let Example { a, b: (c, f) } = &cell);
+//! assert_eq!(a.get(), 10);
+//! a.set(42);
+//! assert_eq!(c.get(), 'x');
+//! c.set('!');
+//! assert_eq!(f.get(), 3.14);
+//! f.set(1.41);
+//!
+//! let value = cell.into_inner();
+//! assert_eq!(value.a, 42);
+//! assert_eq!(value.b.0, '!');
+//! assert_eq!(value.b.1, 1.41);
+//! ```
+//!
+//! And `Pin`s as long as all fields are structurally pinned:
+//!
+//! ```rust
+//! use {
+//!     ::core::{marker::PhantomPinned, pin::Pin},
+//!     ::munge::{munge, StructuralPinning},
+//! };
+//!
+//! struct Example {
+//!     pub a: u32,
+//!     pub b: char,
+//!     pub _phantom: PhantomPinned,
+//! }
+//!
+//! // SAFETY: `Example` obeys structural pinning.
+//! unsafe impl StructuralPinning for Example {}
+//!
+//! let mut value = Example {
+//!     a: 0,
+//!     b: ' ',
+//!     _phantom: PhantomPinned,
+//! };
+//! // SAFETY: `value` will not be moved before being dropped.
+//! let mut pin = unsafe { Pin::new_unchecked(&mut value) };
+//!
+//! munge!(let Example { a, b, .. } = pin.as_mut());
+//! *a.get_mut() = 1;
+//! *b.get_mut() = 'a';
+//!
+//! assert_eq!(pin.as_mut().into_ref().a, 1);
+//! assert_eq!(pin.as_mut().into_ref().b, 'a');
+//! assert_eq!(value.a, 1);
+//! assert_eq!(value.b, 'a');
+//! ```
+//!
+//! You can even extend `munge` to work with your own types by implementing its [`Destructure`] and
+//! [`Restructure`] traits.
 
 #![no_std]
 #![deny(
@@ -39,59 +115,45 @@
     rustdoc::missing_crate_level_docs
 )]
 
-use ::core::{marker::PhantomData, mem::MaybeUninit};
+mod impls;
 
-/// A memory location that may or may not be initialized.
-pub struct Munge<'a, T> {
-    ptr: *mut T,
-    _phantom: PhantomData<&'a mut T>,
+/// A type which has structural pinning for all of its fields.
+///
+/// # Safety
+///
+/// All fields of the implementing type must obey structural pinning. This comes with a detailed set
+/// of requirements detailed in the [`pin` module documentation].
+///
+/// [`pin` module documentation]: ::core::pin#pinning-is-structural-for-field
+pub unsafe trait StructuralPinning {}
+
+/// A type that can be destructured into its constituent parts.
+pub trait Destructure {
+    /// The underlying type that is destructured.
+    type Underlying: ?Sized;
+
+    /// Returns a mutable pointer to the underlying type.
+    fn as_mut_ptr(&mut self) -> *mut Self::Underlying;
 }
 
-impl<'a, T> Munge<'a, T> {
-    /// Create a new `Munge` from a backing `MaybeUninit<T>`.
-    pub fn new(value: &'a mut MaybeUninit<T>) -> Self {
-        Self {
-            ptr: value.as_mut_ptr(),
-            _phantom: PhantomData,
-        }
-    }
+/// A type that can be "restructured" as a field of some containing type.
+///
+/// # Safety
+///
+/// [`restructure`](Restructure::restructure) must return a valid
+/// [`Restructured`](Restructure::Restructured) that upholds the same invariants as a mutably
+/// borrowed subfield of some `T`. These invariants must not be violated if simultaneous mutable
+/// borrows exist to other subfields of the same `T`.
+pub unsafe trait Restructure<T: ?Sized> {
+    /// The restructured version of this type.
+    type Restructured;
 
-    /// Create a new `Munge` from an exclusive pointer.
+    /// Restructures a pointer to this type into the target type.
     ///
     /// # Safety
     ///
-    /// - `ptr` must be non-null, properly aligned, and valid for reads and writes.
-    /// - `ptr` must not alias any other accessible references.
-    pub unsafe fn new_unchecked(ptr: *mut T) -> Self {
-        Self {
-            ptr,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Reborrows this `Munge`.
-    ///
-    /// This method is useful when doing multiple calls to functions that consume the `Munge`.
-    pub fn as_mut<'b>(&mut self) -> Munge<'b, T>
-    where
-        'a: 'b,
-    {
-        Self {
-            ptr: self.ptr,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Gets a pointer to the underlying memory.
-    pub fn as_ptr(self) -> *mut T {
-        self.ptr
-    }
-
-    /// Returns a reference to the underlying `MaybeUninit`.
-    pub fn deref(self) -> &'a mut MaybeUninit<T> {
-        // SAFETY: `self.ptr` is always a valid pointer to a `MaybeUninit<T>`.
-        unsafe { &mut *self.ptr.cast() }
-    }
+    /// `ptr` must be a pointer to a subfield of some `T`.
+    unsafe fn restructure(ptr: *mut Self) -> Self::Restructured;
 }
 
 /// Projects a `MaybeUninit` type to its `MaybeUninit` fields using destructuring.
@@ -107,7 +169,7 @@ impl<'a, T> Munge<'a, T> {
 ///
 /// let mut mu = MaybeUninit::<Example>::uninit();
 ///
-/// munge!(let Example { a, b: (c, mut f) } = mu);
+/// munge!(let Example { a, b: (c, mut f) } = &mut mu);
 /// assert_eq!(a.write(10), &10);
 /// assert_eq!(c.write('x'), &'x');
 /// assert_eq!(f.write(3.14), &3.14);
@@ -121,52 +183,15 @@ impl<'a, T> Munge<'a, T> {
 /// ```
 #[macro_export]
 macro_rules! munge {
-    (@field($value:ident) $field:tt) => {{
-        let munge = $crate::Munge::as_mut(&mut $value);
-        let ptr = $crate::Munge::as_ptr(munge);
+    (@field($ptr:ident) $field:tt) => {{
         // SAFETY: `ptr` always is non-null, properly aligned, and valid for reads and writes.
-        let field = unsafe { ::core::ptr::addr_of_mut!((*ptr).$field) };
-        // SAFETY: `field` is a subfield of `value`.
-        unsafe { project_lifetime(&mut $value, field) }
+        unsafe { ::core::ptr::addr_of_mut!((*$ptr).$field) }
     }};
 
-    (@element($value:ident) $index:tt) => {{
-        let munge = $crate::Munge::as_mut(&mut $value);
-        let ptr = $crate::Munge::as_ptr(munge);
+    (@element($ptr:ident) $index:tt) => {{
         // SAFETY: `ptr` always is non-null, properly aligned, and valid for reads and writes.
-        let element = unsafe { ::core::ptr::addr_of_mut!((*ptr)[$index]) };
-        // SAFETY: `element` is an element of `value`.
-        unsafe { project_lifetime(&mut $value, element) }
+        unsafe { ::core::ptr::addr_of_mut!((*$ptr)[$index]) }
     }};
-
-    (@helper($value:ident) $($tokens:tt)+) => {
-        /// Helper function to assign the correct lifetime to a [`Munge`] when projecting to a
-        /// field.
-        ///
-        /// # Safety
-        ///
-        /// `ptr` must be a pointer to a subsection of the given `Munge`.
-        #[inline(always)]
-        unsafe fn project_lifetime<'a: 'b, 'b, T, U>(
-            _: &mut $crate::Munge<'a, U>,
-            ptr: *mut T,
-        ) -> $crate::Munge<'b, T> {
-            // SAFETY:
-            // - `ptr` is non-null, properly aligned, and valid for reads and writes.
-            // - `ptr` does not alias any accessible references.
-            // - `ptr` is structurally pinned.
-            unsafe { $crate::Munge::new_unchecked(ptr) }
-        }
-
-        #[allow(unreachable_code, unused_variables)]
-        if false {
-            // SAFETY: None of this can ever be executed.
-            unsafe {
-                ::core::hint::unreachable_unchecked();
-                let $($tokens)+ = &mut ::core::ptr::read($value.as_ptr());
-            }
-        }
-    };
 
     (@parse_binding mut $name:ident $(,)?) => {
         munge!(@bindings mut $name)
@@ -202,87 +227,118 @@ macro_rules! munge {
 
     (@bindings [ $($body:tt)+ ]) => { munge!(@parse_binding $($body)+) };
 
-    (@parse_field($value:ident, $field:ident) { $body:tt $(,)? }) => {
-        munge!(@fields($field) $body)
+    (@parse_field($ptr:ident, $field:ident, $value:ident) { $body:tt $(,)? }) => {
+        munge!(@fields($field, $value) $body)
     };
-    (@parse_field($value:ident, $field:ident) { $body:tt, $($rest:tt)+ }) => {(
-        munge!(@fields($field) $body),
-        munge!(@fields($value) { $($rest)+ }),
+    (@parse_field($ptr:ident, $field:ident, $value:ident) { $body:tt, $($rest:tt)+ }) => {(
+        munge!(@fields($field, $value) $body),
+        munge!(@fields($ptr, $value) { $($rest)+ }),
     )};
-    (@parse_field($value:ident, $field:ident) { $first:tt $($rest:tt)+ }) => {
-        munge!(@parse_field($value, $field) { $($rest)+ })
+    (@parse_field($ptr:ident, $field:ident, $value:ident) { $first:tt $($rest:tt)+ }) => {
+        munge!(@parse_field($ptr, $field, $value) { $($rest)+ })
     };
 
-    (@parse_field($value:ident, $index:tt) ( $body:tt $(,)? ) $indices:tt) => {
-        munge!(@fields($index) $body)
+    (@parse_field($ptr:ident, $index:tt, $value:ident) ( $body:tt $(,)? ) $indices:tt) => {
+        munge!(@fields($index, $value) $body)
     };
-    (@parse_field($value:ident, $index:tt) ( $body:tt, $($rest:tt)+ ) $indices:tt) => {(
-        munge!(@fields($index) $body),
-        munge!(@fields($value) ( $($rest)+ ) $indices),
+    (@parse_field($ptr:ident, $index:tt, $value:ident) ( $body:tt, $($rest:tt)+ ) $indices:tt) => {(
+        munge!(@fields($index, $value) $body),
+        munge!(@fields($ptr, $value) ( $($rest)+ ) $indices),
     )};
-    (@parse_field($value:ident, $index:ident) ( $first:tt $($rest:tt)+ ) $indices:tt) => {
-        munge!(@parse_field($value, $index) ( $($rest)+ ) $indices)
+    (@parse_field($ptr:ident, $index:ident, $value:ident) ( $first:tt $($rest:tt)+ ) $indices:tt) => {
+        munge!(@parse_field($ptr, $index, $value) ( $($rest)+ ) $indices)
     };
 
-    (@parse_field($value:ident, $index:tt) [ $body:tt $(,)? ] $indices:tt) => {
-        munge!(@fields($index) $body)
+    (@parse_field($ptr:ident, $index:tt, $value:ident) [ $body:tt $(,)? ] $indices:tt) => {
+        munge!(@fields($index, $value) $body)
     };
-    (@parse_field($value:ident, $index:tt) [ $body:tt, $($rest:tt)+ ] $indices:tt) => {(
-        munge!(@fields($index) $body),
-        munge!(@fields($value) [ $($rest)+ ] $indices),
+    (@parse_field($ptr:ident, $index:tt, $value:ident) [ $body:tt, $($rest:tt)+ ] $indices:tt) => {(
+        munge!(@fields($index, $value) $body),
+        munge!(@fields($ptr, $value) [ $($rest)+ ] $indices),
     )};
-    (@parse_field($value:ident, $index:ident) [ $first:tt $($rest:tt)+ ] $indices:tt) => {
-        munge!(@parse_field($value, $index) [ $($rest)+ ] $indices)
+    (@parse_field($ptr:ident, $index:ident, $value:ident) [ $first:tt $($rest:tt)+ ] $indices:tt) => {
+        munge!(@parse_field($ptr, $index, $value) [ $($rest)+ ] $indices)
     };
 
-    (@fields($value:ident) _) => { unsafe { $crate::Munge::deref($value) } };
-    (@fields($value:ident) $field:ident) => { unsafe { $crate::Munge::deref($value) } };
+    (@fields($ptr:ident, $value:ident) _) => {
+        // SAFETY: This resolves to `&value` and a pointer to one of its subfields.
+        unsafe { project(&$value, $ptr) }
+    };
+    (@fields($ptr:ident, $value:ident) $field:ident) => {
+        // SAFETY: This resolves to `&value` and a pointer to one of its subfields.
+        unsafe { project(&$value, $ptr) }
+    };
 
-    (@fields($value:ident) { .. }) => { () };
-    (@fields($value:ident) { mut $field:ident $(,)? }) => {
-        unsafe { $crate::Munge::deref(munge!(@field($value) $field)) }
+    (@fields($ptr:ident, $value:ident) { .. }) => { () };
+    (@fields($ptr:ident, $value:ident) { mut $field:ident $(,)? }) => {
+        // SAFETY: This resolves to `&value` and a pointer to one of its subfields.
+        unsafe { project(&$value, munge!(@field($ptr) $field)) }
     };
-    (@fields($value:ident) { $field:ident $(,)? }) => {
-        unsafe { $crate::Munge::deref(munge!(@field($value) $field)) }
+    (@fields($ptr:ident, $value:ident) { $field:ident $(,)? }) => {
+        // SAFETY: This resolves to `&value` and a pointer to one of its subfields.
+        unsafe { project(&$value, munge!(@field($ptr) $field)) }
     };
-    (@fields($value:ident) { mut $field:ident, $($rest:tt)+ }) => {(
-        unsafe { $crate::Munge::deref(munge!(@field($value) $field)) },
-        munge!(@fields($value) { $($rest)+ }),
+    (@fields($ptr:ident, $value:ident) { mut $field:ident, $($rest:tt)+ }) => {(
+        // SAFETY: This resolves to `&value` and a pointer to one of its subfields.
+        unsafe { project(&$value, munge!(@field($ptr) $field)) },
+        munge!(@fields($ptr, $value) { $($rest)+ }),
     )};
-    (@fields($value:ident) { $field:ident, $($rest:tt)+ }) => {(
-        unsafe { $crate::Munge::deref(munge!(@field($value) $field)) },
-        munge!(@fields($value) { $($rest)+ }),
+    (@fields($ptr:ident, $value:ident) { $field:ident, $($rest:tt)+ }) => {(
+        // SAFETY: This resolves to `&value` and a pointer to one of its subfields.
+        unsafe { project(&$value, munge!(@field($ptr) $field)) },
+        munge!(@fields($ptr, $value) { $($rest)+ }),
     )};
-    (@fields($value:ident) { $field:ident: $($binding:tt)+ }) => {{
-        let mut $field = munge!(@field($value) $field);
-        munge!(@parse_field($value, $field) { $($binding)+ })
+    (@fields($ptr:ident, $value:ident) { $field:ident: $($binding:tt)+ }) => {{
+        let mut $field = munge!(@field($ptr) $field);
+        munge!(@parse_field($ptr, $field, $value) { $($binding)+ })
     }};
 
-    (@fields($value:ident) ( .. ) $indices:tt) => { () };
-    (@fields($value:ident) ( $($binding:tt)* ) [ $index_first:tt $($index_rest:tt)* ]) => {{
-        let mut index = munge!(@field($value) $index_first);
-        munge!(@parse_field($value, index) ( $($binding)+ ) [ $($index_rest)* ])
+    (@fields($ptr:ident, $value:ident) ( .. ) $indices:tt) => { () };
+    (@fields($ptr:ident, $value:ident) ( $($binding:tt)* ) [ $index_first:tt $($index_rest:tt)* ]) => {{
+        let mut index = munge!(@field($ptr) $index_first);
+        munge!(@parse_field($ptr, index, $value) ( $($binding)+ ) [ $($index_rest)* ])
     }};
-    (@fields($value:ident) ( $($body:tt)* )) => { munge!(@fields($value) ( $($body)* ) [ 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 ]) };
+    (@fields($ptr:ident, $value:ident) ( $($body:tt)* )) => { munge!(@fields($ptr, $value) ( $($body)* ) [ 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 ]) };
 
-    (@fields($value:ident) [ .. ] $indices:tt) => { () };
-    (@fields($value:ident) [ $($binding:tt)* ] [ $index_first:tt $($index_rest:tt)* ]) => {{
-        let mut index = munge!(@element($value) $index_first);
-        munge!(@parse_field($value, index) [ $($binding)+ ] [ $($index_rest)* ])
+    (@fields($ptr:ident, $value:ident) [ .. ] $indices:tt) => { () };
+    (@fields($ptr:ident, $value:ident) [ $($binding:tt)* ] [ $index_first:tt $($index_rest:tt)* ]) => {{
+        let mut index = munge!(@element($ptr) $index_first);
+        munge!(@parse_field($ptr, index, $value) [ $($binding)+ ] [ $($index_rest)* ])
     }};
-    (@fields($value:ident) [ $($body:tt)* ]) => { munge!(@fields($value) [ $($body)* ] [ 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 ]) };
+    (@fields($ptr:ident, $value:ident) [ $($body:tt)* ]) => { munge!(@fields($ptr, $value) [ $($body)* ] [ 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 ]) };
 
-    (@fields($value:ident) $first:tt $($rest:tt)*) => { munge!(@fields($value) $($rest)*) };
+    (@fields($ptr:ident, $value:ident) $first:tt $($rest:tt)*) => { munge!(@fields($ptr, $value) $($rest)*) };
 
-    (@destructure { $($path:tt)* } $body:tt = $mu:expr) => {
-        // Comments get thrown out when the macro gets expanded.
+    (@destructure { $($path:tt)* } $body:tt = $value:expr) => {
+        let mut value = $value;
         let munge!(@bindings $body) = {
+            // Comments get thrown out when the macro gets expanded.
             #[allow(unused_mut, unused_unsafe, clippy::undocumented_unsafe_blocks)]
             {
-                let mut value = $crate::Munge::new(&mut $mu);
+                let ptr = $crate::Destructure::as_mut_ptr(&mut value);
 
-                munge!(@helper(value) $($path)* $body);
-                munge!(@fields(value) $body)
+                #[allow(unreachable_code, unused_variables)]
+                if false {
+                    // SAFETY: None of this can ever be executed.
+                    unsafe {
+                        ::core::hint::unreachable_unchecked();
+                        let $($path)* $body = &mut ::core::ptr::read(ptr);
+                    }
+                }
+
+                /// # Safety
+                ///
+                /// `ptr` must be a pointer to a subfield of `_value`.
+                unsafe fn project<'b, T: ?Sized, U: $crate::Restructure<&'b T> + ?Sized>(
+                    _value: &'b T,
+                    ptr: *mut U,
+                ) -> U::Restructured {
+                    // SAFETY: The caller has guaranteed that `ptr` is a pointer to a subfield of
+                    // `_value`, which is a `&'b T`.
+                    unsafe { U::restructure(ptr) }
+                }
+
+                munge!(@fields(ptr, value) $body)
             }
         };
     };
@@ -303,23 +359,23 @@ mod tests {
     fn test_project_tuple() {
         let mut mu = MaybeUninit::<(u32, char)>::uninit();
 
-        munge!(let (a, b) = mu);
+        munge!(let (a, b) = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write('a'), &'a');
-        munge!(let (a, b,) = mu);
+        munge!(let (a, b,) = &mut mu);
         assert_eq!(a.write(2), &2);
         assert_eq!(b.write('b'), &'b');
 
-        munge!(let (a, _) = mu);
+        munge!(let (a, _) = &mut mu);
         assert_eq!(a.write(3), &3);
-        munge!(let (_, b) = mu);
+        munge!(let (_, b) = &mut mu);
         assert_eq!(b.write('c'), &'c');
-        munge!(let (a, _,) = mu);
+        munge!(let (a, _,) = &mut mu);
         assert_eq!(a.write(3), &3);
-        munge!(let (_, b,) = mu);
+        munge!(let (_, b,) = &mut mu);
         assert_eq!(b.write('c'), &'c');
 
-        munge!(let (mut a, mut b) = mu);
+        munge!(let (mut a, mut b) = &mut mu);
         assert_eq!(a.write(4), &4);
         assert_eq!(b.write('d'), &'d');
         a = &mut MaybeUninit::uninit();
@@ -327,7 +383,7 @@ mod tests {
         let _ = a;
         let _ = b;
 
-        munge!(let (a, ..) = mu);
+        munge!(let (a, ..) = &mut mu);
         assert_eq!(a.write(5), &5);
 
         // SAFETY: `mu` is completely initialized.
@@ -340,23 +396,23 @@ mod tests {
     fn test_project_array() {
         let mut mu = MaybeUninit::<[u32; 2]>::uninit();
 
-        munge!(let [a, b] = mu);
+        munge!(let [a, b] = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write(1), &1);
-        munge!(let [a, b,] = mu);
+        munge!(let [a, b,] = &mut mu);
         assert_eq!(a.write(2), &2);
         assert_eq!(b.write(2), &2);
 
-        munge!(let [a, _] = mu);
+        munge!(let [a, _] = &mut mu);
         assert_eq!(a.write(3), &3);
-        munge!(let [_, b] = mu);
+        munge!(let [_, b] = &mut mu);
         assert_eq!(b.write(3), &3);
-        munge!(let [a, _,] = mu);
+        munge!(let [a, _,] = &mut mu);
         assert_eq!(a.write(4), &4);
-        munge!(let [_, b,] = mu);
+        munge!(let [_, b,] = &mut mu);
         assert_eq!(b.write(4), &4);
 
-        munge!(let [mut a, mut b] = mu);
+        munge!(let [mut a, mut b] = &mut mu);
         assert_eq!(a.write(5), &5);
         assert_eq!(b.write(5), &5);
         a = &mut MaybeUninit::uninit();
@@ -364,7 +420,7 @@ mod tests {
         let _ = a;
         let _ = b;
 
-        munge!(let [a, ..] = mu);
+        munge!(let [a, ..] = &mut mu);
         assert_eq!(a.write(6), &6);
 
         // SAFETY: `mu` is completely initialized.
@@ -382,33 +438,33 @@ mod tests {
 
         let mut mu = MaybeUninit::<Example>::uninit();
 
-        munge!(let Example { a, b } = mu);
+        munge!(let Example { a, b } = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write('a'), &'a');
-        munge!(let Example { a, b, } = mu);
+        munge!(let Example { a, b, } = &mut mu);
         assert_eq!(a.write(2), &2);
         assert_eq!(b.write('b'), &'b');
 
-        munge!(let Example { a, b: x } = mu);
+        munge!(let Example { a, b: x } = &mut mu);
         assert_eq!(a.write(3), &3);
         assert_eq!(x.write('c'), &'c');
-        munge!(let Example { a, b: x, } = mu);
+        munge!(let Example { a, b: x, } = &mut mu);
         assert_eq!(a.write(4), &4);
         assert_eq!(x.write('d'), &'d');
 
-        munge!(let Example { a: x, b } = mu);
+        munge!(let Example { a: x, b } = &mut mu);
         assert_eq!(x.write(3), &3);
         assert_eq!(b.write('c'), &'c');
-        munge!(let Example { a: x, b, } = mu);
+        munge!(let Example { a: x, b, } = &mut mu);
         assert_eq!(x.write(4), &4);
         assert_eq!(b.write('d'), &'d');
 
-        munge!(let Example { a, b: _ } = mu);
+        munge!(let Example { a, b: _ } = &mut mu);
         assert_eq!(a.write(5), &5);
-        munge!(let Example { a, b: _, } = mu);
+        munge!(let Example { a, b: _, } = &mut mu);
         assert_eq!(a.write(6), &6);
 
-        munge!(let Example { mut a, mut b } = mu);
+        munge!(let Example { mut a, mut b } = &mut mu);
         assert_eq!(a.write(7), &7);
         assert_eq!(b.write('e'), &'e');
         a = &mut MaybeUninit::uninit();
@@ -416,7 +472,7 @@ mod tests {
         let _ = a;
         let _ = b;
 
-        munge!(let Example { a: mut x, b: mut y } = mu);
+        munge!(let Example { a: mut x, b: mut y } = &mut mu);
         assert_eq!(x.write(8), &8);
         assert_eq!(y.write('f'), &'f');
         x = &mut MaybeUninit::uninit();
@@ -424,7 +480,7 @@ mod tests {
         let _ = x;
         let _ = y;
 
-        munge!(let Example { b, .. } = mu);
+        munge!(let Example { b, .. } = &mut mu);
         assert_eq!(b.write('g'), &'g');
 
         // SAFETY: `mu` is completely initialized.
@@ -439,23 +495,23 @@ mod tests {
 
         let mut mu = MaybeUninit::<Example>::uninit();
 
-        munge!(let Example(a, b) = mu);
+        munge!(let Example(a, b) = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write('a'), &'a');
-        munge!(let Example(a, b,) = mu);
+        munge!(let Example(a, b,) = &mut mu);
         assert_eq!(a.write(2), &2);
         assert_eq!(b.write('b'), &'b');
 
-        munge!(let Example(a, _) = mu);
+        munge!(let Example(a, _) = &mut mu);
         assert_eq!(a.write(3), &3);
-        munge!(let Example(_, b) = mu);
+        munge!(let Example(_, b) = &mut mu);
         assert_eq!(b.write('c'), &'c');
-        munge!(let Example(a, _,) = mu);
+        munge!(let Example(a, _,) = &mut mu);
         assert_eq!(a.write(3), &3);
-        munge!(let Example(_, b,) = mu);
+        munge!(let Example(_, b,) = &mut mu);
         assert_eq!(b.write('d'), &'d');
 
-        munge!(let Example(mut a, mut b) = mu);
+        munge!(let Example(mut a, mut b) = &mut mu);
         assert_eq!(a.write(4), &4);
         assert_eq!(b.write('e'), &'e');
         a = &mut MaybeUninit::uninit();
@@ -463,7 +519,7 @@ mod tests {
         let _ = a;
         let _ = b;
 
-        munge!(let Example(a, ..) = mu);
+        munge!(let Example(a, ..) = &mut mu);
         assert_eq!(a.write(5), &5);
 
         // SAFETY: `mu` is completely initialized.
@@ -478,23 +534,23 @@ mod tests {
 
         let mut mu = MaybeUninit::<Example<char>>::uninit();
 
-        munge!(let Example(a, b) = mu);
+        munge!(let Example(a, b) = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write('a'), &'a');
-        munge!(let Example(a, b,) = mu);
+        munge!(let Example(a, b,) = &mut mu);
         assert_eq!(a.write(2), &2);
         assert_eq!(b.write('b'), &'b');
 
-        munge!(let Example(a, _) = mu);
+        munge!(let Example(a, _) = &mut mu);
         assert_eq!(a.write(3), &3);
-        munge!(let Example(_, b) = mu);
+        munge!(let Example(_, b) = &mut mu);
         assert_eq!(b.write('c'), &'c');
-        munge!(let Example(a, _,) = mu);
+        munge!(let Example(a, _,) = &mut mu);
         assert_eq!(a.write(3), &3);
-        munge!(let Example(_, b,) = mu);
+        munge!(let Example(_, b,) = &mut mu);
         assert_eq!(b.write('c'), &'c');
 
-        munge!(let Example(a, ..) = mu);
+        munge!(let Example(a, ..) = &mut mu);
         assert_eq!(a.write(4), &4);
 
         // SAFETY: `mu` is completely initialized.
@@ -504,7 +560,7 @@ mod tests {
 
         let mut mu = MaybeUninit::<Example<Example<char>>>::uninit();
 
-        munge!(let Example::<Example<char>>(a, Example::<char>(b, c)) = mu);
+        munge!(let Example::<Example<char>>(a, Example::<char>(b, c)) = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write(2), &2);
         assert_eq!(c.write('a'), &'a');
@@ -529,7 +585,7 @@ mod tests {
 
         let mut mu = MaybeUninit::<Outer>::uninit();
 
-        munge!(let Outer { inner: Inner { a, b }, c } = mu);
+        munge!(let Outer { inner: Inner { a, b }, c } = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write('a'), &'a');
         assert_eq!(c.write(2), &2);
@@ -545,7 +601,7 @@ mod tests {
     fn test_project_nested_tuple() {
         let mut mu = MaybeUninit::<(u32, (char, u32))>::uninit();
 
-        munge!(let (a, (b, c)) = mu);
+        munge!(let (a, (b, c)) = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write('a'), &'a');
         assert_eq!(c.write(2), &2);
@@ -559,7 +615,7 @@ mod tests {
     fn test_project_nested_array() {
         let mut mu = MaybeUninit::<[[u32; 2]; 2]>::uninit();
 
-        munge!(let [a, [b, c]] = mu);
+        munge!(let [a, [b, c]] = &mut mu);
         assert_eq!(a.write([1, 2]), &[1, 2]);
         assert_eq!(b.write(3), &3);
         assert_eq!(c.write(4), &4);
@@ -582,7 +638,7 @@ mod tests {
 
         let mut mu = MaybeUninit::<Outer<char>>::uninit();
 
-        munge!(let Outer { inner: Inner { a, b }, c } = mu);
+        munge!(let Outer { inner: Inner { a, b }, c } = &mut mu);
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write('a'), &'a');
         assert_eq!(c.write(2), &2);
@@ -592,5 +648,68 @@ mod tests {
         assert_eq!(init.inner.a, 1);
         assert_eq!(init.inner.b, 'a');
         assert_eq!(init.c, 2);
+    }
+
+    #[test]
+    fn test_cell() {
+        use ::core::cell::Cell;
+
+        pub struct Example {
+            a: u32,
+            b: (char, f32),
+        }
+
+        let value = Example {
+            a: 10,
+            b: ('x', 3.14),
+        };
+        let cell = Cell::<Example>::new(value);
+
+        munge!(let Example { a, b: (c, f) } = &cell);
+        assert_eq!(a.get(), 10);
+        a.set(42);
+        assert_eq!(c.get(), 'x');
+        c.set('!');
+        assert_eq!(f.get(), 3.14);
+        f.set(1.41);
+
+        let value = cell.into_inner();
+        assert_eq!(value.a, 42);
+        assert_eq!(value.b.0, '!');
+        assert_eq!(value.b.1, 1.41);
+    }
+
+    #[test]
+    fn test_pin() {
+        use {
+            super::StructuralPinning,
+            ::core::{marker::PhantomPinned, pin::Pin},
+        };
+
+        struct Example {
+            pub a: u32,
+            pub b: char,
+            pub _phantom: PhantomPinned,
+        }
+
+        // SAFETY: `Example` obeys structural pinning.
+        unsafe impl StructuralPinning for Example {}
+
+        let mut value = Example {
+            a: 0,
+            b: ' ',
+            _phantom: PhantomPinned,
+        };
+        // SAFETY: `value` will not be moved before being dropped.
+        let mut pin = unsafe { Pin::new_unchecked(&mut value) };
+
+        munge!(let Example { a, b, .. } = pin.as_mut());
+        *a.get_mut() = 1;
+        *b.get_mut() = 'a';
+
+        assert_eq!(pin.as_mut().into_ref().a, 1);
+        assert_eq!(pin.as_mut().into_ref().b, 'a');
+        assert_eq!(value.a, 1);
+        assert_eq!(value.b, 'a');
     }
 }

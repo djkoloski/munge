@@ -1,7 +1,7 @@
 warning: reference to packed field is unaligned
   --> $DIR/packed.rs:18:63
    |
-18 |     munge!(let Misalign { byte: a, inner: Misalign { byte: b, inner } } = mu);
+18 |     munge!(let Misalign { byte: a, inner: Misalign { byte: b, inner } } = &mut mu);
    |                                                               ^^^^^
    |
    = note: `#[warn(unaligned_references)]` on by default

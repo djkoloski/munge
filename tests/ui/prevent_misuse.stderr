@@ -1,0 +1,15 @@
+error[E0505]: cannot move out of `mu` because it is borrowed
+  --> $DIR/prevent_misuse.rs:22:26
+   |
+17 |     munge!(let Example { a, b } = &mut mu);
+   |                                   ------- borrow of `mu` occurs here
+...
+22 |     let value = unsafe { mu.assume_init() };
+   |                          ^^ move out of `mu` occurs here
+...
+28 |     a.write(3);
+   |     ---------- borrow later used here
+
+error: aborting due to previous error
+
+For more information about this error, try `rustc --explain E0505`.

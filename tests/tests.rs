@@ -9,11 +9,13 @@ fn run_mode(mode: &'static str) {
     config.src_base = PathBuf::from(format!("tests/{}", mode));
     config.target_rustcflags = Some("-L target/debug".to_string());
     config.clean_rmeta();
+    // Uncomment to bless tests
+    // config.bless = true;
 
     compiletest::run_tests(&config);
 }
 
 #[test]
-fn compile_test() {
+fn compiletest() {
     run_mode("ui");
 }

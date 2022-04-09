@@ -15,7 +15,7 @@ fn main() {
 
     let mut mu = MaybeUninit::<Misalign<Misalign<u32>>>::uninit();
 
-    munge!(let Misalign { byte: a, inner: Misalign { byte: b, inner } } = mu);
+    munge!(let Misalign { byte: a, inner: Misalign { byte: b, inner } } = &mut mu);
     //^ WARNING: reference to packed field is unaligned
     assert_eq!(a.write(1), &1);
     assert_eq!(b.write(2), &2);

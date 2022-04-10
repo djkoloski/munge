@@ -1,6 +1,10 @@
 use {
-    ::core::{cell::{Cell, UnsafeCell}, mem::{ManuallyDrop, MaybeUninit}, pin::Pin},
     crate::{Destructure, Restructure, StructuralPinning},
+    ::core::{
+        cell::{Cell, UnsafeCell},
+        mem::{ManuallyDrop, MaybeUninit},
+        pin::Pin,
+    },
 };
 
 // *const T

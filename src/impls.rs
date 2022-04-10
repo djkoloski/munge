@@ -1,5 +1,5 @@
 use {
-    ::core::{cell::{Cell, UnsafeCell}, mem::MaybeUninit, pin::Pin},
+    ::core::{cell::{Cell, UnsafeCell}, mem::{ManuallyDrop, MaybeUninit}, pin::Pin},
     crate::{Destructure, Restructure, StructuralPinning},
 };
 
@@ -160,5 +160,23 @@ unsafe impl<'a: 'b, 'b, T: StructuralPinning, U: 'b> Restructure<&'b Pin<&'a mut
         // `&'b Pin<&'a mut T>`, and `T` has structural pinning, so it's safe to mutably derefence
         // as pinned for the `'b` lifetime.
         unsafe { Pin::new_unchecked(&mut *ptr) }
+    }
+}
+
+// ManuallyDrop<T>
+
+impl<'a, T> Destructure for ManuallyDrop<T> {
+    type Underlying = T;
+
+    fn as_mut_ptr(&mut self) -> *mut Self::Underlying {
+        &mut **self as *mut Self::Underlying
+    }
+}
+
+unsafe impl<T, U> Restructure<&ManuallyDrop<T>> for U {
+    type Restructured = ManuallyDrop<U>;
+
+    unsafe fn restructure(ptr: *mut Self) -> Self::Restructured {
+        unsafe { ::core::ptr::read(ptr.cast()) }
     }
 }

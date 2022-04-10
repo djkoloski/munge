@@ -27,6 +27,7 @@ munge!(let Example { a, b: (c, mut f) } = &mut mu);
 assert_eq!(a.write(10), &10);
 assert_eq!(c.write('x'), &'x');
 assert_eq!(f.write(3.14), &3.14);
+// Note that `mut` bindings can be reassigned like you'd expect:
 f = &mut MaybeUninit::uninit();
 
 // SAFETY: `mu` is completely initialized.

@@ -355,7 +355,6 @@ macro_rules! munge {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::approx_constant)]
     use ::core::mem::MaybeUninit;
 
     #[test]
@@ -662,7 +661,7 @@ mod tests {
             b: (char, f32),
         }
 
-        let value = Example { a: 10, b: ('x', 3.14) };
+        let value = Example { a: 10, b: ('x', core::f32::consts::PI) };
         let cell = Cell::<Example>::new(value);
 
         munge!(let Example { a, b: (c, f) } = &cell);
@@ -670,7 +669,7 @@ mod tests {
         a.set(42);
         assert_eq!(c.get(), 'x');
         c.set('!');
-        assert_eq!(f.get(), 3.14);
+        assert_eq!(f.get(), core::f32::consts::PI);
         f.set(1.41);
 
         let value = cell.into_inner();

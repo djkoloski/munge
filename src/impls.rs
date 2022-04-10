@@ -177,6 +177,7 @@ unsafe impl<T, U> Restructure<&ManuallyDrop<T>> for U {
     type Restructured = ManuallyDrop<U>;
 
     unsafe fn restructure(ptr: *mut Self) -> Self::Restructured {
+        // SAFETY: `ptr` is a pointer to a subfield of some `&ManuallyDrop<T>`.
         unsafe { ::core::ptr::read(ptr.cast()) }
     }
 }

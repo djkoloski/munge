@@ -355,6 +355,7 @@ macro_rules! munge {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::approx_constant)]
     use ::core::mem::MaybeUninit;
 
     #[test]
@@ -661,10 +662,7 @@ mod tests {
             b: (char, f32),
         }
 
-        let value = Example {
-            a: 10,
-            b: ('x', 3.14),
-        };
+        let value = Example { a: 10, b: ('x', 3.14) };
         let cell = Cell::<Example>::new(value);
 
         munge!(let Example { a, b: (c, f) } = &cell);
@@ -697,11 +695,7 @@ mod tests {
         // SAFETY: `Example` obeys structural pinning.
         unsafe impl StructuralPinning for Example {}
 
-        let mut value = Example {
-            a: 0,
-            b: ' ',
-            _phantom: PhantomPinned,
-        };
+        let mut value = Example { a: 0, b: ' ', _phantom: PhantomPinned };
         // SAFETY: `value` will not be moved before being dropped.
         let mut pin = unsafe { Pin::new_unchecked(&mut value) };
 
@@ -717,10 +711,7 @@ mod tests {
 
     #[test]
     fn test_manually_drop() {
-        use ::core::{
-            cell::Cell,
-            mem::ManuallyDrop,
-        };
+        use ::core::{cell::Cell, mem::ManuallyDrop};
 
         struct NoisyDrop<'a> {
             counter: &'a Cell<usize>,

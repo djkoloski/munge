@@ -15,3 +15,7 @@ readme = "crates-io.md"
 
 [dev-dependencies]
 compiletest_rs = "0.7"
+
+[features]
+default = []
+offset_of = []

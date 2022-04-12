@@ -1,5 +1,5 @@
 use {
-    crate::{Destructure, Restructure, StructuralPinning},
+    crate::{Aligned, AlignedMut, Destructure, Restructure, StructuralPinning},
     ::core::{
         cell::{Cell, UnsafeCell},
         mem::{ManuallyDrop, MaybeUninit},
@@ -7,39 +7,41 @@ use {
     },
 };
 
-// *const T
+// Aligned<T>
 
-impl<T: ?Sized> Destructure for *const T {
+impl<T: ?Sized> Destructure for Aligned<T> {
     type Underlying = T;
 
     fn as_mut_ptr(&mut self) -> *mut Self::Underlying {
-        *self as *mut T
+        **self as *mut T
     }
 }
 
-unsafe impl<T: ?Sized, U: ?Sized> Restructure<&*const T> for U {
-    type Restructured = *const Self;
+unsafe impl<T: ?Sized, U: ?Sized> Restructure<&Aligned<T>> for U {
+    type Restructured = Aligned<Self>;
 
     unsafe fn restructure(ptr: *mut Self) -> Self::Restructured {
-        ptr as *const Self
+        // SAFETY: The caller has guaranteed that `ptr` is properly aligned.
+        unsafe { Aligned::new_unchecked(ptr as *const Self) }
     }
 }
 
-// *mut T
+// AlignedMut<T>
 
-impl<T: ?Sized> Destructure for *mut T {
+impl<T: ?Sized> Destructure for AlignedMut<T> {
     type Underlying = T;
 
     fn as_mut_ptr(&mut self) -> *mut Self::Underlying {
-        *self
+        **self
     }
 }
 
-unsafe impl<T: ?Sized, U: ?Sized> Restructure<&*mut T> for U {
-    type Restructured = *mut Self;
+unsafe impl<T: ?Sized, U: ?Sized> Restructure<&AlignedMut<T>> for U {
+    type Restructured = AlignedMut<Self>;
 
     unsafe fn restructure(ptr: *mut Self) -> Self::Restructured {
-        ptr
+        // SAFETY: The caller has guaranteed that `ptr` is properly aligned.
+        unsafe { AlignedMut::new_unchecked(ptr) }
     }
 }
 

@@ -118,6 +118,69 @@
 
 mod impls;
 
+use ::core::ops::{Deref, DerefMut};
+
+macro_rules! impl_aligned {
+    ($($name:ident $mut:ident $($refmut:ident)?),*) => {$(
+        /// A pointer that is properly aligned
+        #[derive(Clone, Copy)]
+        pub struct $name<T: ?Sized>(*$mut T);
+
+        impl<T: ?Sized> Deref for $name<T> {
+            type Target = *$mut T;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl<T: ?Sized> DerefMut for $name<T> {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.0
+            }
+        }
+
+        impl<T> $name<T> {
+            /// Attempts to create a new [`Aligned`] from a given pointer.
+            ///
+            /// Returns `None` if the pointer is not properly aligned for a value of type `T`.
+            pub fn new_checked(ptr: *$mut T) -> Option<Self> {
+                if ptr as usize & (::core::mem::align_of::<T>() - 1) != 0 {
+                    None
+                } else {
+                    Some(Self(ptr))
+                }
+            }
+        }
+
+        impl<T: ?Sized> $name<T> {
+            /// Creates a new [`Aligned`] from a given reference.
+            pub fn new(value: &$($refmut)? T) -> Self {
+                Self(value as *$mut T)
+            }
+
+            /// Creates a new [`Aligned`] from a given pointer.
+            ///
+            /// # Safety
+            ///
+            /// The given pointer must be properly aligned for the value it points to.
+            pub unsafe fn new_unchecked(ptr: *$mut T) -> Self {
+                Self(ptr)
+            }
+
+            /// Returns the underlying pointer.
+            pub fn as_ptr(self) -> *$mut T {
+                self.0
+            }
+        }
+    )*}
+}
+
+impl_aligned!(
+    Aligned const,
+    AlignedMut mut mut
+);
+
 /// A type which has structural pinning for all of its fields.
 ///
 /// # Safety
@@ -153,7 +216,7 @@ pub unsafe trait Restructure<T: ?Sized> {
     ///
     /// # Safety
     ///
-    /// `ptr` must be a pointer to a subfield of some `T`.
+    /// `ptr` must be a properly aligned pointer to a subfield of some `T`.
     unsafe fn restructure(ptr: *mut Self) -> Self::Restructured;
 }
 
@@ -661,7 +724,10 @@ mod tests {
             b: (char, f32),
         }
 
-        let value = Example { a: 10, b: ('x', core::f32::consts::PI) };
+        let value = Example {
+            a: 10,
+            b: ('x', core::f32::consts::PI),
+        };
         let cell = Cell::<Example>::new(value);
 
         munge!(let Example { a, b: (c, f) } = &cell);
@@ -694,7 +760,11 @@ mod tests {
         // SAFETY: `Example` obeys structural pinning.
         unsafe impl StructuralPinning for Example {}
 
-        let mut value = Example { a: 0, b: ' ', _phantom: PhantomPinned };
+        let mut value = Example {
+            a: 0,
+            b: ' ',
+            _phantom: PhantomPinned,
+        };
         // SAFETY: `value` will not be moved before being dropped.
         let mut pin = unsafe { Pin::new_unchecked(&mut value) };
 

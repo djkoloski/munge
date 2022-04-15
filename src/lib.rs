@@ -118,69 +118,6 @@
 
 mod impls;
 
-use ::core::ops::{Deref, DerefMut};
-
-macro_rules! impl_aligned {
-    ($($name:ident $mut:ident $($refmut:ident)?),*) => {$(
-        /// A pointer that is properly aligned
-        #[derive(Clone, Copy)]
-        pub struct $name<T: ?Sized>(*$mut T);
-
-        impl<T: ?Sized> Deref for $name<T> {
-            type Target = *$mut T;
-
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
-
-        impl<T: ?Sized> DerefMut for $name<T> {
-            fn deref_mut(&mut self) -> &mut Self::Target {
-                &mut self.0
-            }
-        }
-
-        impl<T> $name<T> {
-            /// Attempts to create a new [`Aligned`] from a given pointer.
-            ///
-            /// Returns `None` if the pointer is not properly aligned for a value of type `T`.
-            pub fn new_checked(ptr: *$mut T) -> Option<Self> {
-                if ptr as usize & (::core::mem::align_of::<T>() - 1) != 0 {
-                    None
-                } else {
-                    Some(Self(ptr))
-                }
-            }
-        }
-
-        impl<T: ?Sized> $name<T> {
-            /// Creates a new [`Aligned`] from a given reference.
-            pub fn new(value: &$($refmut)? T) -> Self {
-                Self(value as *$mut T)
-            }
-
-            /// Creates a new [`Aligned`] from a given pointer.
-            ///
-            /// # Safety
-            ///
-            /// The given pointer must be properly aligned for the value it points to.
-            pub unsafe fn new_unchecked(ptr: *$mut T) -> Self {
-                Self(ptr)
-            }
-
-            /// Returns the underlying pointer.
-            pub fn as_ptr(self) -> *$mut T {
-                self.0
-            }
-        }
-    )*}
-}
-
-impl_aligned!(
-    Aligned const,
-    AlignedMut mut mut
-);
-
 /// A type which has structural pinning for all of its fields.
 ///
 /// # Safety
@@ -192,12 +129,30 @@ impl_aligned!(
 pub unsafe trait StructuralPinning {}
 
 /// A type that can be destructured into its constituent parts.
-pub trait Destructure {
+///
+/// # Safety
+///
+/// Destructuring this type with a given pattern must be safe if and only if destructuring `Test`
+/// with the same pattern is also safe.
+pub unsafe trait Destructure {
     /// The underlying type that is destructured.
     type Underlying: ?Sized;
 
+    /// The type to test destructuring against for safety.
+    type Test;
+
     /// Returns a mutable pointer to the underlying type.
     fn as_mut_ptr(&mut self) -> *mut Self::Underlying;
+
+    /// Returns the type used to test destructuring.
+    ///
+    /// # Safety
+    ///
+    /// It is never safe to call this function.
+    unsafe fn test(&mut self) -> Self::Test {
+        // SAFETY: The caller has guaranteed that this can never be executed.
+        unsafe { ::core::hint::unreachable_unchecked() }
+    }
 }
 
 /// A type that can be "restructured" as a field of some containing type.
@@ -249,13 +204,39 @@ pub unsafe trait Restructure<T: ?Sized> {
 #[macro_export]
 macro_rules! munge {
     (@field($ptr:ident) $field:tt) => {{
-        // SAFETY: `ptr` always is non-null, properly aligned, and valid for reads and writes.
-        unsafe { ::core::ptr::addr_of_mut!((*$ptr).$field) }
+        let uninit = if false {
+            // SAFETY: None of this can ever be executed.
+            unsafe { ::core::mem::MaybeUninit::new(::core::ptr::read($ptr)) }
+        } else {
+            ::core::mem::MaybeUninit::uninit()
+        };
+        let base = uninit.as_ptr();
+        // SAFETY: `base` is always non-null, properly aligned, and valid for reads and writes.
+        let direct = unsafe { ::core::ptr::addr_of!((*base).$field) };
+        let offset = (direct as usize) - (base as usize);
+        // SAFETY: `offset` is the distance between a base pointer and its field, so it must be in
+        // bounds, not overflow an `isize`, and do so without relying on wrapping.
+        let indirect = unsafe { $ptr.cast::<u8>().add(offset) };
+
+        coerce(direct, indirect)
     }};
 
     (@element($ptr:ident) $index:tt) => {{
-        // SAFETY: `ptr` always is non-null, properly aligned, and valid for reads and writes.
-        unsafe { ::core::ptr::addr_of_mut!((*$ptr)[$index]) }
+        let uninit = if false {
+            // SAFETY: None of this can ever be executed.
+            unsafe { ::core::mem::MaybeUninit::new(*$ptr) }
+        } else {
+            ::core::mem::MaybeUninit::uninit()
+        };
+        let base = uninit.as_ptr();
+        // SAFETY: `base` is always non-null, properly aligned, and valid for reads and writes.
+        let direct = unsafe { ::core::ptr::addr_of!((*base)[$index]) };
+        let offset = (direct as usize) - (base as usize);
+        // SAFETY: `offset` is the distance between a base pointer and its field, so it must be in
+        // bounds, not overflow an `isize`, and do so without relying on wrapping.
+        let indirect = unsafe { $ptr.cast::<u8>().add(offset) };
+
+        coerce(direct, indirect)
     }};
 
     (@parse_binding mut $name:ident $(,)?) => {
@@ -387,8 +368,12 @@ macro_rules! munge {
                     // SAFETY: None of this can ever be executed.
                     unsafe {
                         ::core::hint::unreachable_unchecked();
-                        let $($path)* $body = &mut ::core::ptr::read(ptr);
+                        let $($path)* $body = $crate::Destructure::test(&mut value);
                     }
+                }
+
+                fn coerce<T, U>(_: *const T, indirect: *mut U) -> *mut T {
+                    indirect.cast()
                 }
 
                 /// # Safety
@@ -818,5 +803,35 @@ mod tests {
         }
 
         assert_eq!(counter.get(), 1);
+    }
+
+    #[test]
+    fn test_unaligned_pointer() {
+        struct Inner(u32);
+
+        #[repr(C, packed)]
+        struct Outer {
+            a: u8,
+            b: Inner,
+        }
+
+        let outer = &mut Outer { a: 1, b: Inner(2) };
+
+        munge!(let Outer { a, b: Inner(b) } = outer as *mut Outer);
+
+        // SAFETY: `a` is properly aligned and points to a valid `u8`.
+        assert_eq!(1, unsafe { a.read() });
+        // SAFETY: `b` is unaligned but points to a valid `u32`.
+        assert_eq!(2, unsafe { b.read_unaligned() });
+
+        // SAFETY: `a` is properly aligned and points to a valid `u8`.
+        unsafe { a.write(3) }
+        // SAFETY: `b` is unaligned but points to a valid `u32`.
+        unsafe { b.write_unaligned(4) }
+
+        // SAFETY: `a` is properly aligned and points to a valid `u8`.
+        assert_eq!(3, unsafe { a.read() });
+        // SAFETY: `b` is unaligned but points to a valid `u32`.
+        assert_eq!(4, unsafe { b.read_unaligned() });
     }
 }

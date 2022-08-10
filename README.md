@@ -1,6 +1,6 @@
 # `munge`
 
-`munge` makes it easy and safe to destructure raw pointers, `MaybeUninit`s, `Cell`s, and `Pin`s.
+`munge` makes it easy and safe to destructure `MaybeUninit`s, `Cell`s, `ManuallyDrop`s, and more.
 
 Just use the `munge!` macro to destructure opaque types the same way you'd destructure a value.
 
@@ -68,41 +68,6 @@ let value = cell.into_inner();
 assert_eq!(value.a, 42);
 assert_eq!(value.b.0, '!');
 assert_eq!(value.b.1, 1.41);
-```
-
-And `Pin`s as long as all fields are structurally pinned:
-
-```rust
-use {
-    ::core::{marker::PhantomPinned, pin::Pin},
-    ::munge::{munge, StructuralPinning},
-};
-
-struct Example {
-    pub a: u32,
-    pub b: char,
-    pub _phantom: PhantomPinned,
-}
-
-// SAFETY: `Example` obeys structural pinning.
-unsafe impl StructuralPinning for Example {}
-
-let mut value = Example {
-    a: 0,
-    b: ' ',
-    _phantom: PhantomPinned,
-};
-// SAFETY: `value` will not be moved before being dropped.
-let mut pin = unsafe { Pin::new_unchecked(&mut value) };
-
-munge!(let Example { a, b, .. } = pin.as_mut());
-*a.get_mut() = 1;
-*b.get_mut() = 'a';
-
-assert_eq!(pin.as_mut().into_ref().a, 1);
-assert_eq!(pin.as_mut().into_ref().b, 'a');
-assert_eq!(value.a, 1);
-assert_eq!(value.b, 'a');
 ```
 
 You can even extend `munge` to work with your own types by implementing its `Destructure` and

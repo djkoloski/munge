@@ -171,13 +171,13 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                     }
 
                     unsafe fn project<'b, T: ?Sized, U: ?Sized>(
-                        _value: &'b T,
+                        value: &'b T,
                         ptr: *mut U,
                     ) -> <&'b T as #crate_path::Restructure<U>>::Restructured
                     where
                         &'b T: #crate_path::Restructure<U>,
                     {
-                        unsafe { <&'b T as #crate_path::Restructure<U>>::restructure(ptr) }
+                        unsafe { <&'b T as #crate_path::Restructure<U>>::restructure(value, ptr) }
                     }
 
                     #exprs

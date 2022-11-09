@@ -24,7 +24,7 @@ unsafe impl<'a, T> Destructure for &'a MaybeUninit<T> {
 unsafe impl<'a: 'b, 'b, T, U: 'b> Restructure<U> for &'b &'a MaybeUninit<T> {
     type Restructured = &'b MaybeUninit<U>;
 
-    unsafe fn restructure(ptr: *mut U) -> Self::Restructured {
+    unsafe fn restructure(self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of some
         // `&'b &'a MaybeUninit<T>`, so it's safe to dereference for the `'b` lifetime.
         unsafe { &*ptr.cast() }
@@ -49,7 +49,7 @@ unsafe impl<'a, T> Destructure for &'a mut MaybeUninit<T> {
 unsafe impl<'a: 'b, 'b, T, U: 'b> Restructure<U> for &'b &'a mut MaybeUninit<T> {
     type Restructured = &'b mut MaybeUninit<U>;
 
-    unsafe fn restructure(ptr: *mut U) -> Self::Restructured {
+    unsafe fn restructure(self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of some
         // `&'b &'a mut MaybeUninit<T>`, so it's safe to mutably dereference for the `'b` lifetime.
         unsafe { &mut *ptr.cast() }
@@ -74,7 +74,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a Cell<T> {
 unsafe impl<'a: 'b, 'b, T: ?Sized, U: 'b + ?Sized> Restructure<U> for &'b &'a Cell<T> {
     type Restructured = &'b Cell<U>;
 
-    unsafe fn restructure(ptr: *mut U) -> Self::Restructured {
+    unsafe fn restructure(self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of some
         // `&'b &'a Cell<T>`, so it's safe to dereference for the `'b` lifetime. Additionally, `ptr`
         // is guaranteed to have the same pointer metadata as a pointer to `Cell<U>`.
@@ -100,7 +100,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a UnsafeCell<T> {
 unsafe impl<'a: 'b, 'b, T: ?Sized, U: 'b + ?Sized> Restructure<U> for &'b &'a UnsafeCell<T> {
     type Restructured = &'b UnsafeCell<U>;
 
-    unsafe fn restructure(ptr: *mut U) -> Self::Restructured {
+    unsafe fn restructure(self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of some
         // `&'b &'a UnsafeCell<T>`, so it's safe to dereference for the `'b` lifetime. Additionally,
         // `ptr` is guaranteed to have the same pointer metadata as a pointer to `UnsafeCell<U>`.
@@ -126,7 +126,7 @@ unsafe impl<T> Destructure for ManuallyDrop<T> {
 unsafe impl<T, U> Restructure<U> for &ManuallyDrop<T> {
     type Restructured = ManuallyDrop<U>;
 
-    unsafe fn restructure(ptr: *mut U) -> Self::Restructured {
+    unsafe fn restructure(self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: `ptr` is a pointer to a subfield of some `&ManuallyDrop<T>`.
         unsafe { ::core::ptr::read(ptr.cast()) }
     }

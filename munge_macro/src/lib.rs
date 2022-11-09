@@ -63,21 +63,21 @@ impl parse::Parse for Destructure {
     }
 }
 
-fn parse_pat(pat: &Pat) -> Result<(TokenStream, TokenStream), Error> {
+fn parse_pat(crate_path: &TypePath, pat: &Pat) -> Result<(TokenStream, TokenStream), Error> {
     Ok(match pat {
         Pat::Ident(pat_ident) => {
             let mutability = &pat_ident.mutability;
             let ident = &pat_ident.ident;
             (
                 quote! { #mutability #ident },
-                quote! { unsafe { project(&value, ptr) } },
+                quote! { unsafe { #crate_path::Restructure::restructure(&value, ptr) } }
             )
         }
         Pat::Tuple(pat) | Pat::TupleStruct(PatTupleStruct { pat, .. }) => {
             let parsed = pat
                 .elems
                 .iter()
-                .map(parse_pat)
+                .map(|e| parse_pat(crate_path, e))
                 .collect::<Result<Vec<_>, Error>>()?;
             let (idents, (exprs, indices)) = parsed
                 .iter()
@@ -98,7 +98,7 @@ fn parse_pat(pat: &Pat) -> Result<(TokenStream, TokenStream), Error> {
             let parsed = pat_slice
                 .elems
                 .iter()
-                .map(parse_pat)
+                .map(|e| parse_pat(crate_path, e))
                 .collect::<Result<Vec<_>, Error>>()?;
             let (idents, (exprs, indices)) = parsed
                 .iter()
@@ -119,7 +119,7 @@ fn parse_pat(pat: &Pat) -> Result<(TokenStream, TokenStream), Error> {
             let parsed = pat_struct
                 .fields
                 .iter()
-                .map(|fp| parse_pat(&fp.pat).map(|ie| (&fp.member, ie)))
+                .map(|fp| parse_pat(crate_path, &fp.pat).map(|ie| (&fp.member, ie)))
                 .collect::<Result<Vec<_>, Error>>()?;
             let (members, (idents, exprs)) =
                 parsed.into_iter().unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
@@ -153,7 +153,7 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
         let pat = &destructure.pat;
         let expr = &destructure.expr;
 
-        let (bindings, exprs) = parse_pat(pat)?;
+        let (bindings, exprs) = parse_pat(crate_path, pat)?;
 
         result.extend(quote! {
             let mut value = #expr;
@@ -168,16 +168,6 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                             ::core::hint::unreachable_unchecked();
                             let #pat = #crate_path::Destructure::test(&mut value);
                         }
-                    }
-
-                    unsafe fn project<'b, T: ?Sized, U: ?Sized>(
-                        value: &'b T,
-                        ptr: *mut U,
-                    ) -> <&'b T as #crate_path::Restructure<U>>::Restructured
-                    where
-                        &'b T: #crate_path::Restructure<U>,
-                    {
-                        unsafe { <&'b T as #crate_path::Restructure<U>>::restructure(value, ptr) }
                     }
 
                     #exprs

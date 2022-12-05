@@ -17,4 +17,4 @@ readme = "crates-io.md"
 munge_macro = { version = "0.3", path = "../munge_macro" }
 
 [dev-dependencies]
-compiletest_rs = "0.7"
+trybuild = "1.0"

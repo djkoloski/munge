@@ -161,7 +161,7 @@ pub unsafe trait Restructure<T: ?Sized> {
     /// # Safety
     ///
     /// `ptr` must be a properly aligned pointer to a subfield of some `T`.
-    unsafe fn restructure(self, ptr: *mut T) -> Self::Restructured;
+    unsafe fn restructure(&self, ptr: *mut T) -> Self::Restructured;
 }
 
 #[cfg(test)]

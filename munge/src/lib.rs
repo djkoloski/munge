@@ -121,8 +121,9 @@ macro_rules! munge {
 ///
 /// # Safety
 ///
-/// Destructuring this type with a given pattern must be safe if and only if destructuring `Test`
-/// with the same pattern is also safe.
+/// - Destructuring this type with a given pattern must be safe if and only if destructuring `Test`
+///   with the same pattern is also safe.
+/// - `as_mut_ptr` must return a pointer that is non-null, properly aligned, and valid for reads.
 pub unsafe trait Destructure {
     /// The underlying type that is destructured.
     type Underlying: ?Sized;

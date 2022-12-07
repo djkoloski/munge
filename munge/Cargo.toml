@@ -14,7 +14,7 @@ readme = "crates-io.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-munge_macro = { version = "0.3", path = "../munge_macro" }
+munge_macro = { version = "0.4", path = "../munge_macro" }
 
 [dev-dependencies]
 trybuild = "1.0"

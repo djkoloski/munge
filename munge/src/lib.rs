@@ -153,7 +153,7 @@ pub unsafe trait Destructure {
 /// [`Restructured`](Restructure::Restructured) that upholds the same invariants as a mutably
 /// borrowed subfield of some `T`. These invariants must not be violated if simultaneous mutable
 /// borrows exist to other subfields of the same `T`.
-pub unsafe trait Restructure<T: ?Sized> {
+pub unsafe trait Restructure<T: ?Sized>: Destructure {
     /// The restructured version of this type.
     type Restructured;
 

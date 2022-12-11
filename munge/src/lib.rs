@@ -121,28 +121,15 @@ macro_rules! munge {
 ///
 /// # Safety
 ///
-/// - Destructuring this type with a given pattern must be safe if and only if destructuring `Test`
-///   with the same pattern is also safe.
+/// - Destructuring this type with a given pattern must be safe if and only if destructuring
+///   `&Self::Underlying` with the same pattern is also safe.
 /// - `as_mut_ptr` must return a pointer that is non-null, properly aligned, and valid for reads.
 pub unsafe trait Destructure {
     /// The underlying type that is destructured.
     type Underlying: ?Sized;
 
-    /// The type to test destructuring against for safety.
-    type Test;
-
     /// Returns a mutable pointer to the underlying type.
     fn as_mut_ptr(&mut self) -> *mut Self::Underlying;
-
-    /// Returns the type used to test destructuring.
-    ///
-    /// # Safety
-    ///
-    /// It is never safe to call this function.
-    unsafe fn test(&mut self) -> Self::Test {
-        // SAFETY: The caller has guaranteed that this can never be executed.
-        unsafe { ::core::hint::unreachable_unchecked() }
-    }
 }
 
 /// A type that can be "restructured" as a field of some containing type.
@@ -491,47 +478,5 @@ mod tests {
         assert_eq!(value.a, 42);
         assert_eq!(value.b.0, '!');
         assert_eq!(value.b.1, 1.41);
-    }
-
-    #[test]
-    fn test_manually_drop() {
-        use ::core::{cell::Cell, mem::ManuallyDrop};
-
-        struct NoisyDrop<'a> {
-            counter: &'a Cell<usize>,
-            value: u32,
-        }
-
-        impl<'a> Drop for NoisyDrop<'a> {
-            fn drop(&mut self) {
-                self.counter.set(self.counter.get() + 1);
-            }
-        }
-
-        let counter = &Cell::new(0);
-        assert_eq!(counter.get(), 0);
-
-        let noisy_test = NoisyDrop { counter, value: 0 };
-        drop(noisy_test);
-        assert_eq!(counter.get(), 1);
-
-        struct Example<'a> {
-            a: NoisyDrop<'a>,
-            b: (char, NoisyDrop<'a>),
-        }
-
-        {
-            let value = Example {
-                a: NoisyDrop { counter, value: 1 },
-                b: ('x', NoisyDrop { counter, value: 2 }),
-            };
-
-            munge!(let Example { a, b: (c, d) } = ManuallyDrop::new(value));
-            assert_eq!(a.value, 1);
-            assert_eq!(*c, 'x');
-            assert_eq!(d.value, 2);
-        }
-
-        assert_eq!(counter.get(), 1);
     }
 }

@@ -70,7 +70,7 @@ fn parse_pat(crate_path: &TypePath, pat: &Pat) -> Result<(TokenStream, TokenStre
             let ident = &pat_ident.ident;
             (
                 quote! { #mutability #ident },
-                quote! { unsafe { #crate_path::Restructure::restructure(&value, ptr) } }
+                quote! { unsafe { #crate_path::Restructure::restructure(&value, ptr) } },
             )
         }
         Pat::Tuple(pat) | Pat::TupleStruct(PatTupleStruct { pat, .. }) => {
@@ -166,7 +166,7 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                     if false {
                         unsafe {
                             ::core::hint::unreachable_unchecked();
-                            let #pat = #crate_path::Destructure::test(&mut value);
+                            let #pat = &*ptr;
                         }
                     }
 

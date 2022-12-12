@@ -1,8 +1,8 @@
 error: reference to packed field is unaligned
-  --> tests/ui/packed.rs:15:63
+  --> tests/ui/packed.rs:16:60
    |
-15 |     munge!(let Misalign { byte: a, inner: Misalign { byte: b, inner } } = &mut mu);
-   |                                                               ^^^^^
+16 |         let Misalign { byte: a, inner: Misalign { byte: b, inner } } = &mut mu;
+   |                                                            ^^^^^
    |
    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
    = note: for more information, see issue #82523 <https://github.com/rust-lang/rust/issues/82523>
@@ -11,9 +11,9 @@ error: reference to packed field is unaligned
    = note: `#[deny(unaligned_references)]` on by default
 
 error: reference to packed field is unaligned
-  --> tests/ui/packed.rs:24:5
+  --> tests/ui/packed.rs:26:5
    |
-24 |     assert_eq!(init.inner.inner, 3);
+26 |     assert_eq!(init.inner.inner, 3);
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    |
    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!

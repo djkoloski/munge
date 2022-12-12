@@ -1,6 +1,8 @@
-//! `munge` makes it easy and safe to destructure `MaybeUninit`s, `Cell`s, `ManuallyDrop`s and more.
+//! `munge` makes it easy and safe to destructure `MaybeUninit`s, `Cell`s,
+//! `ManuallyDrop`s and more.
 //!
-//! Just use the `munge!` macro to destructure opaque types the same way you'd destructure a value.
+//! Just use the `munge!` macro to destructure opaque types the same way you'd
+//! destructure a value.
 //!
 //! `munge` has no features and is always `#![no_std]`.
 //!
@@ -68,8 +70,8 @@
 //! assert_eq!(value.b.1, 1.41);
 //! ```
 //!
-//! You can even extend `munge` to work with your own types by implementing its [`Destructure`] and
-//! [`Restructure`] traits.
+//! You can even extend `munge` to work with your own types by implementing its
+//! [`Destructure`] and [`Restructure`] traits.
 
 #![no_std]
 #![deny(
@@ -121,9 +123,8 @@ macro_rules! munge {
 ///
 /// # Safety
 ///
-/// - Destructuring this type with a given pattern must be safe if and only if destructuring
-///   `&Self::Underlying` with the same pattern is also safe.
-/// - `as_mut_ptr` must return a pointer that is non-null, properly aligned, and valid for reads.
+/// `as_mut_ptr` must return a pointer that is non-null, properly aligned, and
+/// valid for reads.
 pub unsafe trait Destructure {
     /// The underlying type that is destructured.
     type Underlying: ?Sized;
@@ -137,9 +138,10 @@ pub unsafe trait Destructure {
 /// # Safety
 ///
 /// [`restructure`](Restructure::restructure) must return a valid
-/// [`Restructured`](Restructure::Restructured) that upholds the same invariants as a mutably
-/// borrowed subfield of some `T`. These invariants must not be violated if simultaneous mutable
-/// borrows exist to other subfields of the same `T`.
+/// [`Restructured`](Restructure::Restructured) that upholds the same invariants
+/// as a mutably borrowed subfield of some `T`. These invariants must not be
+/// violated if simultaneous mutable borrows exist to other subfields of the
+/// same `T`.
 pub unsafe trait Restructure<T: ?Sized>: Destructure {
     /// The restructured version of this type.
     type Restructured;
@@ -361,7 +363,9 @@ mod tests {
 
         let mut mu = MaybeUninit::<Example<Example<char>>>::uninit();
 
-        munge!(let Example::<Example<char>>(a, Example::<char>(b, c)) = &mut mu);
+        munge!(
+            let Example::<Example<char>>(a, Example::<char>(b, c)) = &mut mu;
+        );
         assert_eq!(a.write(1), &1);
         assert_eq!(b.write(2), &2);
         assert_eq!(c.write('a'), &'a');

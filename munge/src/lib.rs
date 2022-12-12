@@ -84,6 +84,7 @@
 )]
 
 mod impls;
+mod internal;
 
 #[doc(hidden)]
 pub use ::munge_macro::munge_with_path;
@@ -123,14 +124,22 @@ macro_rules! munge {
 ///
 /// # Safety
 ///
-/// `as_mut_ptr` must return a pointer that is non-null, properly aligned, and
-/// valid for reads.
-pub unsafe trait Destructure {
+/// - [`Destructuring`](Destructure::Destructuring) must reflect the type of
+///   restructuring allowed for the type:
+///   - [`Ref`] if the type may be restructured by creating disjoint borrows of
+///     the fields of `Underlying`.
+///   - [`Value`] if the type may be restructured by moving the fields out of
+///     the destructured `Underlying`.
+/// - [`underlying`](Destructure::underlying) must return a pointer that is
+///   non-null, properly aligned, and valid for reads.
+pub unsafe trait Destructure: Sized {
     /// The underlying type that is destructured.
     type Underlying: ?Sized;
+    /// The type of destructuring to perform.
+    type Destructuring: internal::Destructuring<Self>;
 
     /// Returns a mutable pointer to the underlying type.
-    fn as_mut_ptr(&mut self) -> *mut Self::Underlying;
+    fn underlying(&mut self) -> *mut Self::Underlying;
 }
 
 /// A type that can be "restructured" as a field of some containing type.
@@ -138,10 +147,13 @@ pub unsafe trait Destructure {
 /// # Safety
 ///
 /// [`restructure`](Restructure::restructure) must return a valid
-/// [`Restructured`](Restructure::Restructured) that upholds the same invariants
-/// as a mutably borrowed subfield of some `T`. These invariants must not be
-/// violated if simultaneous mutable borrows exist to other subfields of the
-/// same `T`.
+/// [`Restructured`](Restructure::Restructured) that upholds the invariants for
+/// its [`Destructuring`](Destructure::Destructuring):
+/// - If the type is destructured [by ref](Ref), then the `Restructured` value
+///   must behave as a disjoint borrow of a field of the underlying type.
+/// - If the type is destructured [by value](Value), then the `Restructured`
+///   value must behave as taking ownership of the fields of the underlying
+///   type.
 pub unsafe trait Restructure<T: ?Sized>: Destructure {
     /// The restructured version of this type.
     type Restructured;
@@ -150,8 +162,71 @@ pub unsafe trait Restructure<T: ?Sized>: Destructure {
     ///
     /// # Safety
     ///
-    /// `ptr` must be a properly aligned pointer to a subfield of some `T`.
+    /// `ptr` must be a properly aligned pointer to a subfield of the pointer
+    /// [`underlying`](Destructure::underlying) `self`.
     unsafe fn restructure(&self, ptr: *mut T) -> Self::Restructured;
+}
+
+/// Destructuring by reference.
+pub struct Ref;
+
+impl<T: Destructure> internal::Destructuring<T> for Ref {
+    type Destructurer = internal::Ref<T>;
+}
+
+/// Destructuring by value.
+pub struct Value;
+
+impl<T: Destructure> internal::Destructuring<T> for Value {
+    type Destructurer = internal::Value<T>;
+}
+
+#[doc(hidden)]
+pub fn make_destructurer<T: Destructure>(
+    value: T,
+) -> <T::Destructuring as internal::Destructuring<T>>::Destructurer {
+    internal::Destructurer::new(value)
+}
+
+#[doc(hidden)]
+pub fn destructurer_ptr<T: internal::Destructurer>(
+    destructurer: &mut T,
+) -> *mut <T::Inner as Destructure>::Underlying {
+    Destructure::underlying(destructurer.inner_mut())
+}
+
+/// # Safety
+///
+/// `test_destructurer` may not be called.
+#[doc(hidden)]
+pub fn test_destructurer<'a, T: internal::Test<'a>>(
+    destructurer: &'a mut T,
+) -> T::Test {
+    // SAFETY: `test_destructurer` may not be called.
+    unsafe { T::test(destructurer) }
+}
+
+/// # Safety
+///
+/// `ptr` must be a properly-aligned pointer to a subfield of the pointer
+/// underlying the inner value of `destructurer`.
+#[doc(hidden)]
+pub unsafe fn restructure_destructurer<T: internal::Destructurer, U>(
+    destructurer: &T,
+    ptr: *mut U,
+) -> <T::Inner as Restructure<U>>::Restructured
+where
+    T::Inner: Restructure<U>,
+{
+    // SAFETY: The caller has guaranteed that `ptr` is a properly-aligned
+    // pointer to a subfield of the pointer underlying the inner value of
+    // `destructurer`.
+    unsafe {
+        Restructure::restructure(
+            internal::Destructurer::inner(destructurer),
+            ptr,
+        )
+    }
 }
 
 #[cfg(test)]
@@ -482,5 +557,47 @@ mod tests {
         assert_eq!(value.a, 42);
         assert_eq!(value.b.0, '!');
         assert_eq!(value.b.1, 1.41);
+    }
+
+    #[test]
+    fn test_maybe_uninit_value() {
+        let mu = MaybeUninit::<(u32, char)>::new((10_000, 'x'));
+
+        munge!(let (a, b) = mu);
+        assert_eq!(unsafe { a.assume_init() }, 10_000);
+        assert_eq!(unsafe { b.assume_init() }, 'x');
+    }
+
+    #[test]
+    fn test_cell_value() {
+        use ::core::cell::Cell;
+
+        let cell = Cell::<(u32, char)>::new((10_000, 'x'));
+
+        munge!(let (a, b) = cell);
+        assert_eq!(a.get(), 10_000);
+        assert_eq!(b.get(), 'x');
+    }
+
+    #[test]
+    fn test_unsafe_cell_value() {
+        use ::core::cell::UnsafeCell;
+
+        let uc = UnsafeCell::<(u32, char)>::new((10_000, 'x'));
+
+        munge!(let (mut a, mut b) = uc);
+        assert_eq!(*a.get_mut(), 10_000);
+        assert_eq!(*b.get_mut(), 'x');
+    }
+
+    #[test]
+    fn test_manually_drop_value() {
+        use ::core::mem::ManuallyDrop;
+
+        let md = ManuallyDrop::new((10_000, 'x'));
+
+        munge!(let (a, b) = md);
+        assert_eq!(*a, 10_000);
+        assert_eq!(*b, 'x');
     }
 }

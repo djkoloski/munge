@@ -21,7 +21,7 @@ use ::syn::{
     Index,
     Pat,
     PatTupleStruct,
-    TypePath,
+    Path,
 };
 
 /// Destructures a value by projecting pointers.
@@ -36,7 +36,7 @@ pub fn munge_with_path(
 }
 
 struct Input {
-    crate_path: TypePath,
+    crate_path: Path,
     _arrow: FatArrow,
     destructures: Punctuated<Destructure, Semi>,
 }
@@ -44,7 +44,7 @@ struct Input {
 impl parse::Parse for Input {
     fn parse(input: parse::ParseStream) -> parse::Result<Self> {
         Ok(Input {
-            crate_path: input.parse::<TypePath>()?,
+            crate_path: input.parse::<Path>()?,
             _arrow: input.parse::<FatArrow>()?,
             destructures: input.parse_terminated(Destructure::parse)?,
         })
@@ -70,18 +70,37 @@ impl parse::Parse for Destructure {
 }
 
 fn parse_pat(
-    crate_path: &TypePath,
+    crate_path: &Path,
     pat: &Pat,
 ) -> Result<(TokenStream, TokenStream), Error> {
     Ok(match pat {
         Pat::Ident(pat_ident) => {
             let mutability = &pat_ident.mutability;
             let ident = &pat_ident.ident;
+
+            if let Some(r#ref) = pat_ident.by_ref {
+                return Err(Error::new_spanned(
+                    r#ref,
+                    "`ref` is not allowed in munge destructures",
+                ));
+            }
+            if let Some((at, _)) = pat_ident.subpat {
+                return Err(Error::new_spanned(
+                    at,
+                    "subpatterns are not allowed in munge destructures",
+                ));
+            }
+
             (
                 quote! { #mutability #ident },
                 quote! {
+                    // SAFETY: `ptr` is a properly-aligned pointer to a subfield
+                    // of the pointer underlying `destructurer`.
                     unsafe {
-                        #crate_path::Restructure::restructure(&value, ptr)
+                        #crate_path::restructure_destructurer(
+                            &destructurer,
+                            ptr,
+                        )
                     }
                 },
             )
@@ -92,15 +111,17 @@ fn parse_pat(
                 .iter()
                 .map(|e| parse_pat(crate_path, e))
                 .collect::<Result<Vec<_>, Error>>()?;
-            let (idents, (exprs, indices)) = parsed
+            let (bindings, (exprs, indices)) = parsed
                 .iter()
                 .enumerate()
                 .map(|(i, x)| (&x.0, (&x.1, Index::from(i))))
                 .unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
             (
-                quote! { (#(#idents,)*) },
+                quote! { (#(#bindings,)*) },
                 quote! { (
                     #({
+                        // SAFETY: `ptr` is guaranteed to always be non-null,
+                        // properly-aligned, and valid for reads.
                         let ptr = unsafe {
                             ::core::ptr::addr_of_mut!((*ptr).#indices)
                         };
@@ -115,15 +136,17 @@ fn parse_pat(
                 .iter()
                 .map(|e| parse_pat(crate_path, e))
                 .collect::<Result<Vec<_>, Error>>()?;
-            let (idents, (exprs, indices)) = parsed
+            let (bindings, (exprs, indices)) = parsed
                 .iter()
                 .enumerate()
                 .map(|(i, x)| (&x.0, (&x.1, Index::from(i))))
                 .unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
             (
-                quote! { (#(#idents,)*) },
+                quote! { (#(#bindings,)*) },
                 quote! { (
                     #({
+                        // SAFETY: `ptr` is guaranteed to always be non-null,
+                        // properly-aligned, and valid for reads.
                         let ptr = unsafe {
                             ::core::ptr::addr_of_mut!((*ptr)[#indices])
                         };
@@ -140,12 +163,14 @@ fn parse_pat(
                     parse_pat(crate_path, &fp.pat).map(|ie| (&fp.member, ie))
                 })
                 .collect::<Result<Vec<_>, Error>>()?;
-            let (members, (idents, exprs)) =
+            let (members, (bindings, exprs)) =
                 parsed.into_iter().unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
             (
-                quote! { (#(#idents,)*) },
+                quote! { (#(#bindings,)*) },
                 quote! { (
                     #({
+                        // SAFETY: `ptr` is guaranteed to always be non-null,
+                        // properly-aligned, and valid for reads.
                         let ptr = unsafe {
                             ::core::ptr::addr_of_mut!((*ptr).#members)
                         };
@@ -182,7 +207,7 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
         let (bindings, exprs) = parse_pat(crate_path, pat)?;
 
         result.extend(quote! {
-            let mut value = #expr;
+            let mut destructurer = #crate_path::make_destructurer(#expr);
             let #bindings = {
                 #[allow(
                     unused_mut,
@@ -190,13 +215,16 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                     clippy::undocumented_unsafe_blocks,
                 )]
                 {
-                    let ptr = #crate_path::Destructure::as_mut_ptr(&mut value);
+                    let ptr = #crate_path::destructurer_ptr(&mut destructurer);
 
                     #[allow(unreachable_code, unused_variables)]
                     if false {
+                        // SAFETY: This can never be called.
                         unsafe {
                             ::core::hint::unreachable_unchecked();
-                            let #pat = &*ptr;
+                            let #pat = #crate_path::test_destructurer(
+                                &mut destructurer,
+                            );
                         }
                     }
 

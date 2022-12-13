@@ -139,7 +139,7 @@ pub unsafe trait Destructure: Sized {
     /// The underlying type that is destructured.
     type Underlying: ?Sized;
     /// The type of destructuring to perform.
-    type Destructuring;
+    type Destructuring: internal::Destructuring;
 
     /// Returns a mutable pointer to the underlying type.
     fn underlying(&mut self) -> *mut Self::Underlying;
@@ -175,7 +175,9 @@ pub unsafe trait Restructure<T: ?Sized>: Destructure {
 /// e.g. `let (a, b) = c` where `c` is a reference.
 pub struct Ref;
 
-impl<T: Destructure> internal::Destructuring<T> for Ref {
+impl internal::Destructuring for Ref {}
+
+impl<T: Destructure> internal::DestructuringFor<T> for Ref {
     type Destructurer = internal::Ref<T>;
 }
 
@@ -184,16 +186,18 @@ impl<T: Destructure> internal::Destructuring<T> for Ref {
 /// e.g. `let (a, b) = c` where `c` is a value.
 pub struct Value;
 
-impl<T: Destructure> internal::Destructuring<T> for Value {
+impl internal::Destructuring for Value {}
+
+impl<T: Destructure> internal::DestructuringFor<T> for Value {
     type Destructurer = internal::Value<T>;
 }
 
 #[doc(hidden)]
 pub fn make_destructurer<T: Destructure>(
     value: T,
-) -> <T::Destructuring as internal::Destructuring<T>>::Destructurer
+) -> <T::Destructuring as internal::DestructuringFor<T>>::Destructurer
 where
-    T::Destructuring: internal::Destructuring<T>,
+    T::Destructuring: internal::DestructuringFor<T>,
 {
     internal::Destructurer::new(value)
 }

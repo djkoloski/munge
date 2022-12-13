@@ -2,7 +2,9 @@ use ::core::{mem::ManuallyDrop, ptr::read};
 
 use crate::Destructure;
 
-pub trait Destructuring<T> {
+pub trait Destructuring {}
+
+pub trait DestructuringFor<T>: Destructuring {
     type Destructurer: Destructurer<Inner = T>;
 }
 

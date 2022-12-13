@@ -1,7 +1,11 @@
+`munge` makes it easy and safe to destructure `MaybeUninit`s, `Cell`s,
+`UnsafeCell`s, `ManuallyDrop`s, and more.
 
-`munge` makes it easy and safe to destructure `MaybeUninit`s, `Cell`s, `ManuallyDrop`s, and more.
-
-Just use the `munge!` macro to destructure opaque types the same way you'd destructure a value.
+Just use the `munge!` macro to destructure opaque types the same way you'd
+destructure a value. The `munge!` macro may be used to perform both reference
+destructuring (e.g. `let (a, b) = c` where `c` is a reference) and value
+destructuring (e.g. `let (a, b) = c` where `c` is a value) if the destructured
+type supports it.
 
 `munge` has no features and is always `#![no_std]`.
 
@@ -69,5 +73,5 @@ assert_eq!(value.b.0, '!');
 assert_eq!(value.b.1, 1.41);
 ```
 
-You can even extend `munge` to work with your own types by implementing its `Destructure` and
-`Restructure` traits.
+You can even extend `munge` to work with your own types by implementing its
+`Destructure` and `Restructure` traits.

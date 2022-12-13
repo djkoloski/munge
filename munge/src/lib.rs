@@ -1,8 +1,11 @@
 //! `munge` makes it easy and safe to destructure `MaybeUninit`s, `Cell`s,
-//! `ManuallyDrop`s and more.
+//! `UnsafeCell`s, `ManuallyDrop`s and more.
 //!
 //! Just use the `munge!` macro to destructure opaque types the same way you'd
-//! destructure a value.
+//! destructure a value. The `munge!` macro may be used to perform both
+//! reference destructuring (e.g. `let (a, b) = c` where `c` is a reference) and
+//! value destructuring (e.g. `let (a, b) = c` where `c` is a value) if the
+//! destructured type supports it.
 //!
 //! `munge` has no features and is always `#![no_std]`.
 //!
@@ -168,6 +171,8 @@ pub unsafe trait Restructure<T: ?Sized>: Destructure {
 }
 
 /// Destructuring by reference.
+///
+/// e.g. `let (a, b) = c` where `c` is a reference.
 pub struct Ref;
 
 impl<T: Destructure> internal::Destructuring<T> for Ref {
@@ -175,6 +180,8 @@ impl<T: Destructure> internal::Destructuring<T> for Ref {
 }
 
 /// Destructuring by value.
+///
+/// e.g. `let (a, b) = c` where `c` is a value.
 pub struct Value;
 
 impl<T: Destructure> internal::Destructuring<T> for Value {

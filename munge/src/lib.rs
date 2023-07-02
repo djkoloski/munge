@@ -31,7 +31,8 @@
 //! assert_eq!(c.write('x'), &'x');
 //! assert_eq!(f.write(3.14), &3.14);
 //! // Note that `mut` bindings can be reassigned like you'd expect:
-//! f = &mut MaybeUninit::uninit();
+//! let mut new_f = MaybeUninit::uninit();
+//! f = &mut new_f;
 //!
 //! // SAFETY: `mu` is completely initialized.
 //! let init = unsafe { mu.assume_init() };
@@ -110,7 +111,8 @@ pub use ::munge_macro::munge_with_path;
 /// assert_eq!(c.write('x'), &'x');
 /// assert_eq!(f.write(3.14), &3.14);
 /// // Note that `mut` bindings can be reassigned like you'd expect:
-/// f = &mut MaybeUninit::uninit();
+/// let mut new_f = MaybeUninit::uninit();
+/// f = &mut new_f;
 ///
 /// // SAFETY: `mu` is completely initialized.
 /// let init = unsafe { mu.assume_init() };
@@ -270,8 +272,10 @@ mod tests {
         munge!(let (mut a, mut b) = &mut mu);
         assert_eq!(a.write(4), &4);
         assert_eq!(b.write('d'), &'d');
-        a = &mut MaybeUninit::uninit();
-        b = &mut MaybeUninit::uninit();
+        let mut new_a = MaybeUninit::uninit();
+        a = &mut new_a;
+        let mut new_b = MaybeUninit::uninit();
+        b = &mut new_b;
         let _ = a;
         let _ = b;
 
@@ -307,8 +311,10 @@ mod tests {
         munge!(let [mut a, mut b] = &mut mu);
         assert_eq!(a.write(5), &5);
         assert_eq!(b.write(5), &5);
-        a = &mut MaybeUninit::uninit();
-        b = &mut MaybeUninit::uninit();
+        let mut new_a = MaybeUninit::uninit();
+        a = &mut new_a;
+        let mut new_b = MaybeUninit::uninit();
+        b = &mut new_b;
         let _ = a;
         let _ = b;
 
@@ -359,16 +365,20 @@ mod tests {
         munge!(let Example { mut a, mut b } = &mut mu);
         assert_eq!(a.write(7), &7);
         assert_eq!(b.write('e'), &'e');
-        a = &mut MaybeUninit::uninit();
-        b = &mut MaybeUninit::uninit();
+        let mut new_a = MaybeUninit::uninit();
+        a = &mut new_a;
+        let mut new_b = MaybeUninit::uninit();
+        b = &mut new_b;
         let _ = a;
         let _ = b;
 
         munge!(let Example { a: mut x, b: mut y } = &mut mu);
         assert_eq!(x.write(8), &8);
         assert_eq!(y.write('f'), &'f');
-        x = &mut MaybeUninit::uninit();
-        y = &mut MaybeUninit::uninit();
+        let mut new_x = MaybeUninit::uninit();
+        x = &mut new_x;
+        let mut new_y = MaybeUninit::uninit();
+        y = &mut new_y;
         let _ = x;
         let _ = y;
 
@@ -406,8 +416,10 @@ mod tests {
         munge!(let Example(mut a, mut b) = &mut mu);
         assert_eq!(a.write(4), &4);
         assert_eq!(b.write('e'), &'e');
-        a = &mut MaybeUninit::uninit();
-        b = &mut MaybeUninit::uninit();
+        let mut new_a = MaybeUninit::uninit();
+        a = &mut new_a;
+        let mut new_b = MaybeUninit::uninit();
+        b = &mut new_b;
         let _ = a;
         let _ = b;
 

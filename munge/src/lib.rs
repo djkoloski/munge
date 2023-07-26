@@ -90,6 +90,8 @@
 mod impls;
 mod internal;
 
+use ::core::hint::unreachable_unchecked;
+
 #[doc(hidden)]
 pub use ::munge_macro::munge_with_path;
 
@@ -215,11 +217,9 @@ pub fn destructurer_ptr<T: internal::Destructurer>(
 ///
 /// `test_destructurer` may not be called.
 #[doc(hidden)]
-pub fn test_destructurer<'a, T: internal::Test<'a>>(
-    destructurer: &'a mut T,
-) -> T::Test {
+pub fn test_destructurer<'a, T: internal::Test<'a>>(_: &'a mut T) -> T::Test {
     // SAFETY: `test_destructurer` may not be called.
-    unsafe { T::test(destructurer) }
+    unsafe { unreachable_unchecked() }
 }
 
 /// # Safety

@@ -1,4 +1,4 @@
-use ::core::{mem::ManuallyDrop, ptr::read};
+use ::core::mem::ManuallyDrop;
 
 use crate::Destructure;
 
@@ -20,11 +20,6 @@ pub trait Destructurer {
 
 pub trait Test<'a> {
     type Test;
-
-    /// # Safety
-    ///
-    /// `test` may not be called.
-    unsafe fn test(&'a mut self) -> Self::Test;
 }
 
 pub struct Ref<T>(T);
@@ -47,11 +42,6 @@ impl<T: Destructure> Destructurer for Ref<T> {
 
 impl<'a, T: 'a + Destructure> Test<'a> for Ref<T> {
     type Test = &'a T::Underlying;
-
-    unsafe fn test(&'a mut self) -> Self::Test {
-        // SAFETY: `test` may not be called.
-        unsafe { &*T::underlying(&mut self.0) }
-    }
 }
 
 pub struct Value<T>(ManuallyDrop<T>);
@@ -77,9 +67,4 @@ where
     T::Underlying: Sized,
 {
     type Test = T::Underlying;
-
-    unsafe fn test(&'a mut self) -> Self::Test {
-        // SAFETY: `test` may not be called.
-        unsafe { read(T::underlying(&mut self.0)) }
-    }
 }

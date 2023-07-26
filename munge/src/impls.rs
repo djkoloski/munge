@@ -118,18 +118,11 @@ unsafe impl<T, U> Restructure<U> for Cell<T> {
     type Restructured = Cell<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
-        let ptr =
-            // SAFETY: `Cell<U>` is `repr(transparent)` and so guaranteed to
-            // have the same representation as the `U` it contains. Therefore,
-            // the pointer metadata for `*const Cell<U>` is the same as the
-            // metadata for `*mut U`, and transmuting between the two types is
-            // sound.
-            unsafe { ::core::mem::transmute::<*mut U, *const Cell<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
         // subfield of some `T`, so it must be properly aligned, valid for
         // reads, and initialized. We may move the fields because the
         // restructuring type for `Cell<T>` is `Value`.
-        unsafe { read(ptr) }
+        unsafe { read(ptr.cast_const().cast()) }
     }
 }
 
@@ -229,6 +222,40 @@ unsafe impl<T, U> Restructure<U> for UnsafeCell<T> {
     type Restructured = UnsafeCell<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
+        // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
+        // subfield of some `T`, so it must be properly aligned, valid for
+        // reads, and initialized. We may move the fields because the
+        // restructuring type for `UnsafeCell<T>` is `Value`.
+        unsafe { read(ptr.cast()) }
+    }
+}
+
+// &UnsafeCell<T>
+
+// SAFETY:
+// - `&UnsafeCell<T>` is destructured by reference, so its `Destructuring` type
+//   is `Ref`.
+// - `underlying` returns a pointer to its inner type, so it is guaranteed to be
+//   non-null, properly aligned, and valid for reads.
+unsafe impl<'a, T: ?Sized> Destructure for &'a UnsafeCell<T> {
+    type Underlying = T;
+    type Destructuring = Ref;
+
+    fn underlying(&mut self) -> *mut Self::Underlying {
+        self.get()
+    }
+}
+
+// SAFETY: `restructure` returns a `&UnsafeCell<U>` that borrows the
+// restructured field because `&UnsafeCell<T>` is destructured by reference.
+unsafe impl<'a, T, U> Restructure<U> for &'a UnsafeCell<T>
+where
+    T: ?Sized,
+    U: 'a + ?Sized,
+{
+    type Restructured = &'a UnsafeCell<U>;
+
+    unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: `UnsafeCell<U>` is `repr(transparent)` and so guaranteed to
         // have the same representation as the `U` it contains. Therefore, the
         // pointer metadata for `*const UnsafeCell<U>` is the same as the
@@ -237,11 +264,11 @@ unsafe impl<T, U> Restructure<U> for UnsafeCell<T> {
         let ptr = unsafe {
             ::core::mem::transmute::<*mut U, *const UnsafeCell<U>>(ptr)
         };
-        // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
-        // subfield of some `T`, so it must be properly aligned, valid for
-        // reads, and initialized. We may move the fields because the
-        // restructuring type for `UnsafeCell<T>` is `Value`.
-        unsafe { read(ptr) }
+        // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
+        // some `UnsafeCell<T>`, so it's safe to dereference. Because the
+        // restructuring type for `&UnsafeCell<T>` is `Ref`, we may create a
+        // disjoint borrow and create a reference to it for `'a`.
+        unsafe { &*ptr }
     }
 }
 
@@ -257,7 +284,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a mut UnsafeCell<T> {
     type Destructuring = Ref;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
-        self.get_mut()
+        self.get()
     }
 }
 
@@ -323,7 +350,7 @@ unsafe impl<T, U> Restructure<U> for ManuallyDrop<T> {
 //   type is `Ref`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T> Destructure for &'a ManuallyDrop<T> {
+unsafe impl<'a, T: ?Sized> Destructure for &'a ManuallyDrop<T> {
     type Underlying = T;
     type Destructuring = Ref;
 
@@ -334,15 +361,27 @@ unsafe impl<'a, T> Destructure for &'a ManuallyDrop<T> {
 
 // SAFETY: `restructure` returns a `&ManuallyDrop<U>` that borrows the
 // restructured field because `&ManuallyDrop<T>` is destructured by reference.
-unsafe impl<'a, T, U: 'a> Restructure<U> for &'a ManuallyDrop<T> {
+unsafe impl<'a, T, U> Restructure<U> for &'a ManuallyDrop<T>
+where
+    T: ?Sized,
+    U: 'a + ?Sized,
+{
     type Restructured = &'a ManuallyDrop<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
+        // SAFETY: `ManuallyDrop<U>` is `repr(transparent)` and so guaranteed to
+        // have the same representation as the `U` it contains. Therefore, the
+        // pointer metadata for `*const ManuallyDrop<U>` is the same as the
+        // metadata for `*mut U`, and transmuting between the two types is
+        // sound.
+        let ptr = unsafe {
+            ::core::mem::transmute::<*mut U, *const ManuallyDrop<U>>(ptr)
+        };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `ManuallyDrop<T>`, so it's safe to dereference. Because the
         // restructuring type for `&ManuallyDrop<T>` is `Ref`, we may create a
         // disjoint borrow and create a reference to it for `'a`.
-        unsafe { &*ptr.cast() }
+        unsafe { &*ptr }
     }
 }
 
@@ -353,7 +392,7 @@ unsafe impl<'a, T, U: 'a> Restructure<U> for &'a ManuallyDrop<T> {
 //   type is `Ref`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T> Destructure for &'a mut ManuallyDrop<T> {
+unsafe impl<'a, T: ?Sized> Destructure for &'a mut ManuallyDrop<T> {
     type Underlying = T;
     type Destructuring = Ref;
 
@@ -365,14 +404,26 @@ unsafe impl<'a, T> Destructure for &'a mut ManuallyDrop<T> {
 // SAFETY: `restructure` returns a `&mut ManuallyDrop<U>` that borrows the
 // restructured field because `&mut ManuallyDrop<T>` is destructured by
 // reference.
-unsafe impl<'a, T, U: 'a> Restructure<U> for &'a mut ManuallyDrop<T> {
+unsafe impl<'a, T, U> Restructure<U> for &'a mut ManuallyDrop<T>
+where
+    T: ?Sized,
+    U: 'a + ?Sized,
+{
     type Restructured = &'a mut ManuallyDrop<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
+        // SAFETY: `ManuallyDrop<U>` is `repr(transparent)` and so guaranteed to
+        // have the same representation as the `U` it contains. Therefore, the
+        // pointer metadata for `*mut ManuallyDrop<U>` is the same as the
+        // metadata for `*mut U`, and transmuting between the two types is
+        // sound.
+        let ptr = unsafe {
+            ::core::mem::transmute::<*mut U, *mut ManuallyDrop<U>>(ptr)
+        };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `ManuallyDrop<T>`, so it's safe to dereference. Because the
         // restructuring type for `&mut ManuallyDrop<T>` is `Ref`, we may create
         // a disjoint borrow and create a reference to it for `'a`.
-        unsafe { &mut *ptr.cast() }
+        unsafe { &mut *ptr }
     }
 }

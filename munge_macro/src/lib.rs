@@ -23,6 +23,8 @@ use ::syn::{
     PatTupleStruct,
     Path,
 };
+use quote::quote_spanned;
+use syn::{spanned::Spanned, PatRest, PatTuple};
 
 /// Destructures a value by projecting pointers.
 #[proc_macro]
@@ -46,7 +48,7 @@ impl parse::Parse for Input {
         Ok(Input {
             crate_path: input.parse::<Path>()?,
             _arrow: input.parse::<FatArrow>()?,
-            destructures: input.parse_terminated(Destructure::parse)?,
+            destructures: input.parse_terminated(Destructure::parse, Semi)?,
         })
     }
 }
@@ -62,11 +64,23 @@ impl parse::Parse for Destructure {
     fn parse(input: parse::ParseStream) -> parse::Result<Self> {
         Ok(Destructure {
             _let_token: input.parse::<Let>()?,
-            pat: input.parse::<Pat>()?,
+            pat: Pat::parse_single(input)?,
             _eq_token: input.parse::<Eq>()?,
             expr: input.parse::<Expr>()?,
         })
     }
+}
+
+fn rest_check(crate_path: &Path, rest: &PatRest) -> (TokenStream, TokenStream) {
+    let span = rest.dot2_token.span();
+    let destructurer = quote! { destructurer };
+    (
+        quote_spanned! { span => _ },
+        quote_spanned! { span => {
+            let phantom = #crate_path::get_destructure(&#destructurer);
+            #crate_path::rest_patterns_are_ref_destructuring_only(phantom)
+        } },
+    )
 }
 
 fn parse_pat(
@@ -105,9 +119,9 @@ fn parse_pat(
                 },
             )
         }
-        Pat::Tuple(pat) | Pat::TupleStruct(PatTupleStruct { pat, .. }) => {
-            let parsed = pat
-                .elems
+        Pat::Tuple(PatTuple { elems, .. })
+        | Pat::TupleStruct(PatTupleStruct { elems, .. }) => {
+            let parsed = elems
                 .iter()
                 .map(|e| parse_pat(crate_path, e))
                 .collect::<Result<Vec<_>, Error>>()?;
@@ -165,8 +179,20 @@ fn parse_pat(
                 .collect::<Result<Vec<_>, Error>>()?;
             let (members, (bindings, exprs)) =
                 parsed.into_iter().unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
+
+            let (rest_binding, rest_expr) = if let Some(rest) = &pat_struct.rest
+            {
+                let (binding, expr) = rest_check(crate_path, rest);
+                (Some(binding), Some(expr))
+            } else {
+                (None, None)
+            };
+
             (
-                quote! { (#(#bindings,)*) },
+                quote! { (
+                    #(#bindings,)*
+                    #rest_binding
+                ) },
                 quote! { (
                     #({
                         // SAFETY: `ptr` is guaranteed to always be non-null,
@@ -176,13 +202,11 @@ fn parse_pat(
                         };
                         #exprs
                     },)*
+                    #rest_expr
                 ) },
             )
         }
-        Pat::Rest(pat_rest) => {
-            let token = &pat_rest.dot2_token;
-            (quote! { #token }, quote! {})
-        }
+        Pat::Rest(pat_rest) => rest_check(crate_path, pat_rest),
         Pat::Wild(pat_wild) => {
             let token = &pat_wild.underscore_token;
             (quote! { #token }, quote! {})

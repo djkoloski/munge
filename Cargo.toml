@@ -3,3 +3,4 @@ members = [
     "munge",
     "munge_macro",
 ]
+resolver = "2"

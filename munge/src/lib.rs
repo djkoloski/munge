@@ -75,7 +75,63 @@
 //! ```
 //!
 //! You can even extend `munge` to work with your own types by implementing its
-//! [`Destructure`] and [`Restructure`] traits.
+//! [`Destructure`] and [`Restructure`] traits:
+//!
+//! ```rust
+//! use munge::{Destructure, Restructure, Value, munge};
+//!
+//!
+//! pub struct Invariant<T>(T);
+//!
+//! impl<T> Invariant<T> {
+//!     /// # Safety
+//!     ///
+//!     /// `value` must uphold my custom invariant.
+//!     pub unsafe fn new_unchecked(value: T) -> Self {
+//!         Self(value)
+//!     }
+//!
+//!     pub fn unwrap(self) -> T {
+//!         self.0
+//!     }
+//! }
+//!
+//! // SAFETY:
+//! // - `Invariant<T>` is destructured by value, so its `Destructuring` type is
+//! //   `Value`.
+//! // - `underlying` returns a pointer to its inner type, so it is guaranteed
+//! //   to be non-null, properly aligned, and valid for reads.
+//! unsafe impl<T> Destructure for Invariant<T> {
+//!     type Underlying = T;
+//!     type Destructuring = Value;
+//!
+//!     fn underlying(&mut self) -> *mut Self::Underlying {
+//!         &mut self.0 as *mut Self::Underlying
+//!     }
+//! }
+//!
+//! // SAFETY: `restructure` returns an `Invariant<U>` that takes ownership of
+//! // the restructured field because `Invariant<T>` is destructured by value.
+//! unsafe impl<T, U> Restructure<U> for Invariant<T> {
+//!     type Restructured = Invariant<U>;
+//!
+//!     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
+//!         // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
+//!         // subfield of some `T`, so it must be properly aligned, valid for
+//!         // reads, and initialized. We may move the fields because the
+//!         // restructuring type for `Invariant<T>` is `Value`.
+//!         let value = unsafe { ptr.read() };
+//!         Invariant(value)
+//!     }
+//! }
+//!
+//! // SAFETY: `(1, 2, 3)` upholds my custom invariant.
+//! let value = unsafe { Invariant::new_unchecked((1, 2, 3)) };
+//! munge!(let (one, two, three) = value);
+//! assert_eq!(one.unwrap(), 1);
+//! assert_eq!(two.unwrap(), 2);
+//! assert_eq!(three.unwrap(), 3);
+//! ```
 
 #![no_std]
 #![deny(
@@ -90,8 +146,7 @@
 mod impls;
 mod internal;
 
-use ::core::hint::unreachable_unchecked;
-
+use ::core::{hint::unreachable_unchecked, marker::PhantomData};
 #[doc(hidden)]
 pub use ::munge_macro::munge_with_path;
 
@@ -245,12 +300,28 @@ where
     }
 }
 
+#[doc(hidden)]
+pub fn get_destructure<T>(_: &T) -> PhantomData<T::Inner>
+where
+    T: internal::Destructurer,
+{
+    PhantomData
+}
+
+#[doc(hidden)]
+pub fn rest_patterns_are_ref_destructuring_only<
+    T: Destructure<Destructuring = Ref>,
+>(
+    _: PhantomData<T>,
+) {
+}
+
 #[cfg(test)]
 mod tests {
     use ::core::mem::MaybeUninit;
 
     #[test]
-    fn test_project_tuple() {
+    fn project_tuple() {
         let mut mu = MaybeUninit::<(u32, char)>::uninit();
 
         munge!(let (a, b) = &mut mu);
@@ -289,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_array() {
+    fn project_array() {
         let mut mu = MaybeUninit::<[u32; 2]>::uninit();
 
         munge!(let [a, b] = &mut mu);
@@ -328,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_struct() {
+    fn project_struct() {
         pub struct Example {
             pub a: u32,
             pub b: char,
@@ -392,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_tuple_struct() {
+    fn project_tuple_struct() {
         struct Example(u32, char);
 
         let mut mu = MaybeUninit::<Example>::uninit();
@@ -433,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_generic() {
+    fn project_generic() {
         struct Example<T>(u32, T);
 
         let mut mu = MaybeUninit::<Example<char>>::uninit();
@@ -479,7 +550,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_nested_struct() {
+    fn project_nested_struct() {
         struct Inner {
             a: u32,
             b: char,
@@ -504,7 +575,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_nested_tuple() {
+    fn project_nested_tuple() {
         let mut mu = MaybeUninit::<(u32, (char, u32))>::uninit();
 
         munge!(let (a, (b, c)) = &mut mu);
@@ -518,7 +589,7 @@ mod tests {
     }
 
     #[test]
-    fn test_project_nested_array() {
+    fn project_nested_array() {
         let mut mu = MaybeUninit::<[[u32; 2]; 2]>::uninit();
 
         munge!(let [a, [b, c]] = &mut mu);
@@ -532,7 +603,7 @@ mod tests {
     }
 
     #[test]
-    fn test_generics() {
+    fn generics() {
         struct Inner<T> {
             a: u32,
             b: T,
@@ -557,7 +628,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cell() {
+    fn cell() {
         use ::core::cell::Cell;
 
         pub struct Example {
@@ -586,7 +657,7 @@ mod tests {
     }
 
     #[test]
-    fn test_maybe_uninit_value() {
+    fn maybe_uninit_value() {
         let mu = MaybeUninit::<(u32, char)>::new((10_000, 'x'));
 
         munge!(let (a, b) = mu);
@@ -595,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cell_value() {
+    fn cell_value() {
         use ::core::cell::Cell;
 
         let cell = Cell::<(u32, char)>::new((10_000, 'x'));
@@ -606,7 +677,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unsafe_cell_value() {
+    fn unsafe_cell_value() {
         use ::core::cell::UnsafeCell;
 
         let uc = UnsafeCell::<(u32, char)>::new((10_000, 'x'));
@@ -617,7 +688,7 @@ mod tests {
     }
 
     #[test]
-    fn test_manually_drop_value() {
+    fn manually_drop_value() {
         use ::core::mem::ManuallyDrop;
 
         let md = ManuallyDrop::new((10_000, 'x'));
@@ -625,5 +696,46 @@ mod tests {
         munge!(let (a, b) = md);
         assert_eq!(*a, 10_000);
         assert_eq!(*b, 'x');
+    }
+
+    #[test]
+    fn struct_partial_ref_destructuring() {
+        use ::core::cell::Cell;
+
+        struct Example {
+            a: u32,
+            b: u32,
+        }
+
+        let mut value = Cell::new(Example { a: 0, b: 1 });
+
+        munge!(let Example { a, .. } = &mut value);
+        assert_eq!(a.get(), 0);
+        a.set(2);
+        assert_eq!(a.get(), 2);
+
+        munge!(let Example { a: c, b: _ } = &value);
+        assert_eq!(c.get(), 2);
+        c.set(3);
+        assert_eq!(c.get(), 3);
+    }
+
+    #[test]
+    fn tuple_partial_ref_destructuring() {
+        use ::core::cell::Cell;
+
+        struct Example(u32, u32);
+
+        let mut value = Cell::new(Example(0, 1));
+
+        munge!(let Example(a, ..) = &mut value);
+        assert_eq!(a.get(), 0);
+        a.set(2);
+        assert_eq!(a.get(), 2);
+
+        munge!(let Example(c, _) = &value);
+        assert_eq!(c.get(), 2);
+        c.set(3);
+        assert_eq!(c.get(), 3);
     }
 }

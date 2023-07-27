@@ -142,10 +142,11 @@
     rustdoc::missing_crate_level_docs
 )]
 
+#[doc(hidden)]
+pub mod __macro;
 mod impls;
 mod internal;
 
-use ::core::{hint::unreachable_unchecked, marker::PhantomData};
 #[doc(hidden)]
 pub use ::munge_macro::munge_with_path;
 
@@ -247,71 +248,6 @@ impl internal::Destructuring for Move {}
 
 impl<T: Destructure> internal::DestructuringFor<T> for Move {
     type Destructurer = internal::Move<T>;
-}
-
-#[doc(hidden)]
-pub fn make_destructurer<T: Destructure>(
-    value: T,
-) -> <T::Destructuring as internal::DestructuringFor<T>>::Destructurer
-where
-    T::Destructuring: internal::DestructuringFor<T>,
-{
-    internal::Destructurer::new(value)
-}
-
-#[doc(hidden)]
-pub fn destructurer_ptr<T: internal::Destructurer>(
-    destructurer: &mut T,
-) -> *mut <T::Inner as Destructure>::Underlying {
-    Destructure::underlying(destructurer.inner_mut())
-}
-
-/// # Safety
-///
-/// `test_destructurer` may not be called.
-#[doc(hidden)]
-pub fn test_destructurer<'a, T: internal::Test<'a>>(_: &'a mut T) -> T::Test {
-    // SAFETY: `test_destructurer` may not be called.
-    unsafe { unreachable_unchecked() }
-}
-
-/// # Safety
-///
-/// `ptr` must be a properly-aligned pointer to a subfield of the pointer
-/// underlying the inner value of `destructurer`.
-#[doc(hidden)]
-pub unsafe fn restructure_destructurer<T: internal::Destructurer, U>(
-    destructurer: &T,
-    ptr: *mut U,
-) -> <T::Inner as Restructure<U>>::Restructured
-where
-    T::Inner: Restructure<U>,
-{
-    // SAFETY: The caller has guaranteed that `ptr` is a properly-aligned
-    // pointer to a subfield of the pointer underlying the inner value of
-    // `destructurer`.
-    unsafe {
-        Restructure::restructure(
-            internal::Destructurer::inner(destructurer),
-            ptr,
-        )
-    }
-}
-
-#[doc(hidden)]
-pub fn get_destructure<T>(_: &T) -> PhantomData<T::Inner>
-where
-    T: internal::Destructurer,
-{
-    PhantomData
-}
-
-#[doc(hidden)]
-pub fn only_borrow_destructuring_may_use_rest_patterns<
-    T: Destructure<Destructuring = Borrow>,
->(
-    _: PhantomData<T>,
-) {
 }
 
 #[cfg(test)]

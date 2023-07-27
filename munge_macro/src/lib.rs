@@ -74,15 +74,14 @@ impl parse::Parse for Destructure {
 fn rest_check(crate_path: &Path, rest: &PatRest) -> (TokenStream, TokenStream) {
     let span = rest.dot2_token.span();
     let destructurer = quote! { destructurer };
-    (
-        quote_spanned! { span => _ },
-        quote_spanned! { span => {
-            let phantom = #crate_path::get_destructure(&#destructurer);
-            #crate_path::only_borrow_destructuring_may_use_rest_patterns(
-                phantom
-            )
-        } },
-    )
+
+    let expr = quote_spanned! { span => {
+        let phantom = #crate_path::__macro::get_destructure(&#destructurer);
+        #crate_path::__macro::only_borrow_destructuring_may_use_rest_patterns(
+            phantom
+        )
+    } };
+    (quote_spanned! { span => _ }, expr)
 }
 
 fn parse_pat(
@@ -113,7 +112,7 @@ fn parse_pat(
                     // SAFETY: `ptr` is a properly-aligned pointer to a subfield
                     // of the pointer underlying `destructurer`.
                     unsafe {
-                        #crate_path::restructure_destructurer(
+                        #crate_path::__macro::restructure_destructurer(
                             &destructurer,
                             ptr,
                         )
@@ -233,7 +232,9 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
         let (bindings, exprs) = parse_pat(crate_path, pat)?;
 
         result.extend(quote! {
-            let mut destructurer = #crate_path::make_destructurer(#expr);
+            let mut destructurer = #crate_path::__macro::make_destructurer(
+                #expr
+            );
             let #bindings = {
                 #[allow(
                     unused_mut,
@@ -241,14 +242,16 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                     clippy::undocumented_unsafe_blocks,
                 )]
                 {
-                    let ptr = #crate_path::destructurer_ptr(&mut destructurer);
+                    let ptr = #crate_path::__macro::destructurer_ptr(
+                        &mut destructurer
+                    );
 
                     #[allow(unreachable_code, unused_variables)]
                     if false {
                         // SAFETY: This can never be called.
                         unsafe {
                             ::core::hint::unreachable_unchecked();
-                            let #pat = #crate_path::test_destructurer(
+                            let #pat = #crate_path::__macro::test_destructurer(
                                 &mut destructurer,
                             );
                         }

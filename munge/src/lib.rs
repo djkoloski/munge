@@ -184,6 +184,9 @@ macro_rules! munge {
 
 /// A type that can be destructured into its constituent parts.
 ///
+/// See the [crate docs](index.html#examples) for an example of implementing
+/// `Destructure` and `Restructure`.
+///
 /// # Safety
 ///
 /// - [`Destructuring`](Destructure::Destructuring) must reflect the type of
@@ -206,6 +209,9 @@ pub unsafe trait Destructure: Sized {
 
 /// A type that can be "restructured" as a field of some containing type.
 ///
+/// See the [crate docs](index.html#examples) for an example of implementing
+/// `Destructure` and `Restructure`.
+///
 /// # Safety
 ///
 /// [`restructure`](Restructure::restructure) must return a valid
@@ -214,7 +220,7 @@ pub unsafe trait Destructure: Sized {
 /// - If the type is destructured [by borrow](Borrow), then the `Restructured`
 ///   value must behave as a disjoint borrow of a field of the underlying type.
 /// - If the type is destructured [by move](Move), then the `Restructured` value
-///   must behave as taking ownership of the fields of the underlying type.
+///   must move the fields out of the underlying type.
 pub unsafe trait Restructure<T: ?Sized>: Destructure {
     /// The restructured version of this type.
     type Restructured;
@@ -228,9 +234,12 @@ pub unsafe trait Restructure<T: ?Sized>: Destructure {
     unsafe fn restructure(&self, ptr: *mut T) -> Self::Restructured;
 }
 
-/// Destructuring by borrow.
+/// Destructuring by borrow, e.g. `let (a, b) = c` where `c` is a reference.
 ///
-/// e.g. `let (a, b) = c` where `c` is a reference.
+/// Borrow destructuring leaves the original value intact, only borrowing from
+/// the destructured value. Borrow destructuring may use rest patterns (`..`)
+/// because the original value is not moved and so it is safe to restructure
+/// only some of the fields of the destructured value.
 pub struct Borrow;
 
 impl internal::Destructuring for Borrow {}
@@ -239,9 +248,12 @@ impl<T: Destructure> internal::DestructuringFor<T> for Borrow {
     type Destructurer = internal::Borrow<T>;
 }
 
-/// Destructuring by move.
+/// Destructuring by move, e.g. `let (a, b) = c` where `c` is a value.
 ///
-/// e.g. `let (a, b) = c` where `c` is a value.
+/// Move destructuring forgets the original value and moves each destructured
+/// field during restructuring. Move destructuring may not use rest patterns
+/// (`..`) because every field of the original value must be restructured, else
+/// they will be forgotten.
 pub struct Move;
 
 impl internal::Destructuring for Move {}

@@ -1,12 +1,12 @@
 [package]
 name = "munge"
-version = "0.4.0"
-authors = ["David Koloski <djkoloski@gmail.com>"]
-edition = "2021"
 description = "Macro for custom destructuring"
-license = "MIT"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
 documentation = "https://docs.rs/munge"
-repository = "https://github.com/djkoloski/munge"
 keywords = ["munge", "macro", "destructure"]
 categories = ["no-std", "rust-patterns"]
 readme = "crates-io.md"
@@ -14,7 +14,7 @@ readme = "crates-io.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-munge_macro = { version = "0.4", path = "../munge_macro" }
+munge_macro.workspace = true
 
 [dev-dependencies]
-trybuild = "1.0"
+trybuild.workspace = true

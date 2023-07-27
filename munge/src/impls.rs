@@ -4,18 +4,18 @@ use ::core::{
     ptr::read,
 };
 
-use crate::{Destructure, Ref, Restructure, Value};
+use crate::{Borrow, Destructure, Move, Restructure};
 
 // MaybeUninit<T>
 
 // SAFETY:
-// - `MaybeUninit<T>` is destructured by value, so its `Destructuring` type is
-//   `Value`.
+// - `MaybeUninit<T>` is destructured by move, so its `Destructuring` type is
+//   `Move`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<T> Destructure for MaybeUninit<T> {
     type Underlying = T;
-    type Destructuring = Value;
+    type Destructuring = Move;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.as_ptr() as *mut Self::Underlying
@@ -23,7 +23,7 @@ unsafe impl<T> Destructure for MaybeUninit<T> {
 }
 
 // SAFETY: `restructure` returns a `MaybeUninit<U>` that takes ownership of the
-// restructured field because `MaybeUninit<T>` is destructured by value.
+// restructured field because `MaybeUninit<T>` is destructured by mvoe.
 unsafe impl<T, U> Restructure<U> for MaybeUninit<T> {
     type Restructured = MaybeUninit<U>;
 
@@ -31,7 +31,7 @@ unsafe impl<T, U> Restructure<U> for MaybeUninit<T> {
         // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
         // subfield of some `T`, so it must be properly aligned, valid for
         // reads, and initialized. We may move the fields because the
-        // restructuring type for `MaybeUninit<T>` is `Value`.
+        // destructuring type for `MaybeUninit<T>` is `Move`.
         unsafe { read(ptr.cast()) }
     }
 }
@@ -39,13 +39,13 @@ unsafe impl<T, U> Restructure<U> for MaybeUninit<T> {
 // &MaybeUninit<T>
 
 // SAFETY:
-// - `&MaybeUninit<T>` is destructured by reference, so its `Destructuring` type
-//   is `Ref`.
+// - `&MaybeUninit<T>` is destructured by borrow, so its `Destructuring` type
+//   is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T> Destructure for &'a MaybeUninit<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.as_ptr() as *mut Self::Underlying
@@ -53,15 +53,15 @@ unsafe impl<'a, T> Destructure for &'a MaybeUninit<T> {
 }
 
 // SAFETY: `restructure` returns a `&MaybeUninit<U>` that borrows the
-// restructured field because `&MaybeUninit<T>` is destructured by reference.
+// restructured field because `&MaybeUninit<T>` is destructured by borrow.
 unsafe impl<'a, T, U: 'a> Restructure<U> for &'a MaybeUninit<T> {
     type Restructured = &'a MaybeUninit<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `MaybeUninit<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&MaybeUninit<T>` is `Ref`, we may create a
-        // disjoint borrow and create a reference to it for `'a`.
+        // destructuring type for `&MaybeUninit<T>` is `Borrow`, we may create a
+        // disjoint borrow of it for `'a`.
         unsafe { &*ptr.cast() }
     }
 }
@@ -69,13 +69,13 @@ unsafe impl<'a, T, U: 'a> Restructure<U> for &'a MaybeUninit<T> {
 // &mut MaybeUninit<T>
 
 // SAFETY:
-// - `&mut MaybeUninit<T>` is destructured by reference, so its `Destructuring`
-//   type is `Ref`.
+// - `&mut MaybeUninit<T>` is destructured by borrow, so its `Destructuring`
+//   type is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T> Destructure for &'a mut MaybeUninit<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         MaybeUninit::as_mut_ptr(self)
@@ -83,16 +83,15 @@ unsafe impl<'a, T> Destructure for &'a mut MaybeUninit<T> {
 }
 
 // SAFETY: `restructure` returns a `&mut MaybeUninit<U>` that borrows the
-// restructured field because `&mut MaybeUninit<T>` is destructured by
-// reference.
+// restructured field because `&mut MaybeUninit<T>` is destructured by borrow.
 unsafe impl<'a, T, U: 'a> Restructure<U> for &'a mut MaybeUninit<T> {
     type Restructured = &'a mut MaybeUninit<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `MaybeUninit<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&mut MaybeUninit<T>` is `Ref`, we may create
-        // a disjoint borrow and create a reference to it for `'a`.
+        // destructuring type for `&mut MaybeUninit<T>` is `Borrow`, we may
+        // create a disjoint borrow of it for `'a`.
         unsafe { &mut *ptr.cast() }
     }
 }
@@ -100,12 +99,12 @@ unsafe impl<'a, T, U: 'a> Restructure<U> for &'a mut MaybeUninit<T> {
 // Cell<T>
 
 // SAFETY:
-// - `Cell<T>` is destructured by value, so its `Destructuring` type is `Value`.
+// - `Cell<T>` is destructured by move, so its `Destructuring` type is `Move`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<T> Destructure for Cell<T> {
     type Underlying = T;
-    type Destructuring = Value;
+    type Destructuring = Move;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.as_ptr()
@@ -113,7 +112,7 @@ unsafe impl<T> Destructure for Cell<T> {
 }
 
 // SAFETY: `restructure` returns a `Cell<U>` that takes ownership of the
-// restructured field because `Cell<T>` is destructured by value.
+// restructured field because `Cell<T>` is destructured by move.
 unsafe impl<T, U> Restructure<U> for Cell<T> {
     type Restructured = Cell<U>;
 
@@ -121,7 +120,7 @@ unsafe impl<T, U> Restructure<U> for Cell<T> {
         // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
         // subfield of some `T`, so it must be properly aligned, valid for
         // reads, and initialized. We may move the fields because the
-        // restructuring type for `Cell<T>` is `Value`.
+        // destructuring type for `Cell<T>` is `Move`.
         unsafe { read(ptr.cast_const().cast()) }
     }
 }
@@ -129,13 +128,13 @@ unsafe impl<T, U> Restructure<U> for Cell<T> {
 // &Cell<T>
 
 // SAFETY:
-// - `&Cell<T>` is destructured by reference, so its `Destructuring` type is
-//   `Ref`.
+// - `&Cell<T>` is destructured by borrow, so its `Destructuring` type is
+//   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a Cell<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.as_ptr()
@@ -143,7 +142,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a Cell<T> {
 }
 
 // SAFETY: `restructure` returns a `&Cell<U>` that borrows the restructured
-// field because `&Cell<T>` is destructured by reference.
+// field because `&Cell<T>` is destructured by borrow.
 unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a Cell<T> {
     type Restructured = &'a Cell<U>;
 
@@ -157,8 +156,8 @@ unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a Cell<T> {
             unsafe { ::core::mem::transmute::<*mut U, *const Cell<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `Cell<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&Cell<T>` is `Ref`, we may create a disjoint
-        // borrow and create a reference to it for `'a`.
+        // destructuring type for `&Cell<T>` is `Borrow`, we may create a
+        // disjoint borrow of it for `'a`.
         unsafe { &*ptr }
     }
 }
@@ -166,13 +165,13 @@ unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a Cell<T> {
 // &mut Cell<T>
 
 // SAFETY:
-// - `&mut Cell<T>` is destructured by reference, so its `Destructuring` type is
-//   `Ref`.
+// - `&mut Cell<T>` is destructured by borrow, so its `Destructuring` type is
+//   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a mut Cell<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.as_ptr()
@@ -180,7 +179,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a mut Cell<T> {
 }
 
 // SAFETY: `restructure` returns a `&mut Cell<U>` that borrows the restructured
-// field because `&mut Cell<T>` is destructured by reference.
+// field because `&mut Cell<T>` is destructured by borrow.
 unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a mut Cell<T> {
     type Restructured = &'a mut Cell<U>;
 
@@ -194,8 +193,8 @@ unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a mut Cell<T> {
             unsafe { ::core::mem::transmute::<*mut U, *mut Cell<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `Cell<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&mut Cell<T>` is `Ref`, we may create a
-        // disjoint borrow and create a reference to it for `'a`.
+        // destructuring type for `&mut Cell<T>` is `Borrow`, we may create a
+        // disjoint borrow of it for `'a`.
         unsafe { &mut *ptr }
     }
 }
@@ -203,13 +202,13 @@ unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a mut Cell<T> {
 // UnsafeCell<T>
 
 // SAFETY:
-// - `UnsafeCell<T>` is destructured by value, so its `Destructuring` type is
-//   `Value`.
+// - `UnsafeCell<T>` is destructured by move, so its `Destructuring` type is
+//   `Move`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<T> Destructure for UnsafeCell<T> {
     type Underlying = T;
-    type Destructuring = Value;
+    type Destructuring = Move;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.get()
@@ -217,7 +216,7 @@ unsafe impl<T> Destructure for UnsafeCell<T> {
 }
 
 // SAFETY: `restructure` returns a `UnsafeCell<U>` that takes ownership of the
-// restructured field because `UnsafeCell<T>` is destructured by value.
+// restructured field because `UnsafeCell<T>` is destructured by move.
 unsafe impl<T, U> Restructure<U> for UnsafeCell<T> {
     type Restructured = UnsafeCell<U>;
 
@@ -225,7 +224,7 @@ unsafe impl<T, U> Restructure<U> for UnsafeCell<T> {
         // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
         // subfield of some `T`, so it must be properly aligned, valid for
         // reads, and initialized. We may move the fields because the
-        // restructuring type for `UnsafeCell<T>` is `Value`.
+        // destructuring type for `UnsafeCell<T>` is `Move`.
         unsafe { read(ptr.cast()) }
     }
 }
@@ -233,13 +232,13 @@ unsafe impl<T, U> Restructure<U> for UnsafeCell<T> {
 // &UnsafeCell<T>
 
 // SAFETY:
-// - `&UnsafeCell<T>` is destructured by reference, so its `Destructuring` type
-//   is `Ref`.
+// - `&UnsafeCell<T>` is destructured by borrow, so its `Destructuring` type
+//   is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a UnsafeCell<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.get()
@@ -247,7 +246,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a UnsafeCell<T> {
 }
 
 // SAFETY: `restructure` returns a `&UnsafeCell<U>` that borrows the
-// restructured field because `&UnsafeCell<T>` is destructured by reference.
+// restructured field because `&UnsafeCell<T>` is destructured by borrow.
 unsafe impl<'a, T, U> Restructure<U> for &'a UnsafeCell<T>
 where
     T: ?Sized,
@@ -266,8 +265,8 @@ where
         };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `UnsafeCell<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&UnsafeCell<T>` is `Ref`, we may create a
-        // disjoint borrow and create a reference to it for `'a`.
+        // destructuring type for `&UnsafeCell<T>` is `Borrow`, we may create a
+        // disjoint borrow of it for `'a`.
         unsafe { &*ptr }
     }
 }
@@ -275,13 +274,13 @@ where
 // &mut UnsafeCell<T>
 
 // SAFETY:
-// - `&mut UnsafeCell<T>` is destructured by reference, so its `Destructuring`
-//   type is `Ref`.
+// - `&mut UnsafeCell<T>` is destructured by borrow, so its `Destructuring`
+//   type is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a mut UnsafeCell<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         self.get()
@@ -289,7 +288,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a mut UnsafeCell<T> {
 }
 
 // SAFETY: `restructure` returns a `&mut UnsafeCell<U>` that borrows the
-// restructured field because `&mut UnsafeCell<T>` is destructured by reference.
+// restructured field because `&mut UnsafeCell<T>` is destructured by borrow.
 unsafe impl<'a, T, U> Restructure<U> for &'a mut UnsafeCell<T>
 where
     T: ?Sized,
@@ -307,8 +306,8 @@ where
         };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `UnsafeCell<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&mut UnsafeCell<T>` is `Ref`, we may create a
-        // disjoint borrow and create a reference to it for `'a`.
+        // destructuring type for `&mut UnsafeCell<T>` is `Borrow`, we may
+        // create a disjoint borrow of it for `'a`.
         unsafe { &mut *ptr }
     }
 }
@@ -316,13 +315,13 @@ where
 // ManuallyDrop<T>
 
 // SAFETY:
-// - `ManuallyDrop<T>` is destructured by value, so its `Destructuring` type is
-//   `Value`.
+// - `ManuallyDrop<T>` is destructured by move, so its `Destructuring` type is
+//   `Move`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<T> Destructure for ManuallyDrop<T> {
     type Underlying = T;
-    type Destructuring = Value;
+    type Destructuring = Move;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         &mut **self as *mut Self::Underlying
@@ -330,7 +329,7 @@ unsafe impl<T> Destructure for ManuallyDrop<T> {
 }
 
 // SAFETY: `restructure` returns a `ManuallyDrop<U>` that takes ownership of the
-// restructured field because `ManuallyDrop<T>` is destructured by value.
+// restructured field because `ManuallyDrop<T>` is destructured by move.
 unsafe impl<T, U> Restructure<U> for ManuallyDrop<T> {
     type Restructured = ManuallyDrop<U>;
 
@@ -338,7 +337,7 @@ unsafe impl<T, U> Restructure<U> for ManuallyDrop<T> {
         // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
         // subfield of some `T`, so it must be properly aligned, valid for
         // reads, and initialized. We may move the fields because the
-        // restructuring type for `ManuallyDrop<T>` is `Value`.
+        // destructuring type for `ManuallyDrop<T>` is `Move`.
         unsafe { read(ptr.cast()) }
     }
 }
@@ -346,13 +345,13 @@ unsafe impl<T, U> Restructure<U> for ManuallyDrop<T> {
 // &ManuallyDrop<T>
 
 // SAFETY:
-// - `&ManuallyDrop<T>` is destructured by reference, so its `Destructuring`
-//   type is `Ref`.
+// - `&ManuallyDrop<T>` is destructured by borrow, so its `Destructuring`
+//   type is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a ManuallyDrop<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         (&***self as *const Self::Underlying).cast_mut()
@@ -360,7 +359,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a ManuallyDrop<T> {
 }
 
 // SAFETY: `restructure` returns a `&ManuallyDrop<U>` that borrows the
-// restructured field because `&ManuallyDrop<T>` is destructured by reference.
+// restructured field because `&ManuallyDrop<T>` is destructured by borrow.
 unsafe impl<'a, T, U> Restructure<U> for &'a ManuallyDrop<T>
 where
     T: ?Sized,
@@ -379,8 +378,8 @@ where
         };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `ManuallyDrop<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&ManuallyDrop<T>` is `Ref`, we may create a
-        // disjoint borrow and create a reference to it for `'a`.
+        // destructuring type for `&ManuallyDrop<T>` is `Borrow`, we may create
+        // a disjoint borrow of it for `'a`.
         unsafe { &*ptr }
     }
 }
@@ -388,13 +387,13 @@ where
 // &mut ManuallyDrop<T>
 
 // SAFETY:
-// - `&mut ManuallyDrop<T>` is destructured by reference, so its `Destructuring`
-//   type is `Ref`.
+// - `&mut ManuallyDrop<T>` is destructured by borrow, so its `Destructuring`
+//   type is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a mut ManuallyDrop<T> {
     type Underlying = T;
-    type Destructuring = Ref;
+    type Destructuring = Borrow;
 
     fn underlying(&mut self) -> *mut Self::Underlying {
         &mut ***self as *mut Self::Underlying
@@ -403,7 +402,7 @@ unsafe impl<'a, T: ?Sized> Destructure for &'a mut ManuallyDrop<T> {
 
 // SAFETY: `restructure` returns a `&mut ManuallyDrop<U>` that borrows the
 // restructured field because `&mut ManuallyDrop<T>` is destructured by
-// reference.
+// borrow.
 unsafe impl<'a, T, U> Restructure<U> for &'a mut ManuallyDrop<T>
 where
     T: ?Sized,
@@ -422,8 +421,8 @@ where
         };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `ManuallyDrop<T>`, so it's safe to dereference. Because the
-        // restructuring type for `&mut ManuallyDrop<T>` is `Ref`, we may create
-        // a disjoint borrow and create a reference to it for `'a`.
+        // destructuring type for `&mut ManuallyDrop<T>` is `Borrow`, we may
+        // create a disjoint borrow of it for `'a`.
         unsafe { &mut *ptr }
     }
 }

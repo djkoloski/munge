@@ -1,29 +1,29 @@
-error[E0271]: type mismatch resolving `<MaybeUninit<Struct> as Destructure>::Destructuring == Ref`
+error[E0271]: type mismatch resolving `<MaybeUninit<Struct> as Destructure>::Destructuring == Borrow`
   --> tests/ui/rest_patterns_ref_only.rs:14:28
    |
 14 |     munge!(let Struct { a, .. } = mu);
    |     -----------------------^---------
    |     |                      |
-   |     |                      expected `Ref`, found `Value`
+   |     |                      expected `Borrow`, found `Move`
    |     required by a bound introduced by this call
    |
-note: required by a bound in `rest_patterns_are_ref_destructuring_only`
+note: required by a bound in `only_borrow_destructuring_may_use_rest_patterns`
   --> src/lib.rs
    |
-   |     T: Destructure<Destructuring = Ref>,
-   |                    ^^^^^^^^^^^^^^^^^^^ required by this bound in `rest_patterns_are_ref_destructuring_only`
+   |     T: Destructure<Destructuring = Borrow>,
+   |                    ^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `only_borrow_destructuring_may_use_rest_patterns`
 
-error[E0271]: type mismatch resolving `<MaybeUninit<Tuple> as Destructure>::Destructuring == Ref`
+error[E0271]: type mismatch resolving `<MaybeUninit<Tuple> as Destructure>::Destructuring == Borrow`
   --> tests/ui/rest_patterns_ref_only.rs:20:25
    |
 20 |     munge!(let Tuple(a, ..) = mu);
    |     --------------------^--------
    |     |                   |
-   |     |                   expected `Ref`, found `Value`
+   |     |                   expected `Borrow`, found `Move`
    |     required by a bound introduced by this call
    |
-note: required by a bound in `rest_patterns_are_ref_destructuring_only`
+note: required by a bound in `only_borrow_destructuring_may_use_rest_patterns`
   --> src/lib.rs
    |
-   |     T: Destructure<Destructuring = Ref>,
-   |                    ^^^^^^^^^^^^^^^^^^^ required by this bound in `rest_patterns_are_ref_destructuring_only`
+   |     T: Destructure<Destructuring = Borrow>,
+   |                    ^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `only_borrow_destructuring_may_use_rest_patterns`

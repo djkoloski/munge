@@ -78,7 +78,9 @@ fn rest_check(crate_path: &Path, rest: &PatRest) -> (TokenStream, TokenStream) {
         quote_spanned! { span => _ },
         quote_spanned! { span => {
             let phantom = #crate_path::get_destructure(&#destructurer);
-            #crate_path::rest_patterns_are_ref_destructuring_only(phantom)
+            #crate_path::only_borrow_destructuring_may_use_rest_patterns(
+                phantom
+            )
         } },
     )
 }

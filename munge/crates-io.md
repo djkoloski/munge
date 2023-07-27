@@ -2,10 +2,10 @@
 `UnsafeCell`s, `ManuallyDrop`s, and more.
 
 Just use the `munge!` macro to destructure opaque types the same way you'd
-destructure a value. The `munge!` macro may be used to perform both reference
-destructuring (e.g. `let (a, b) = c` where `c` is a reference) and value
-destructuring (e.g. `let (a, b) = c` where `c` is a value) if the destructured
-type supports it.
+destructure a value. The `munge!` macro may be used to perform either borrow
+destructuring (e.g. `let (a, b) = c` where `c` is a reference) or move
+destructuring (e.g. `let (a, b) = c` where `c` is a value) depending on the
+type.
 
 `munge` has no features and is always `#![no_std]`.
 
@@ -74,4 +74,60 @@ assert_eq!(value.b.1, 1.41);
 ```
 
 You can even extend `munge` to work with your own types by implementing its
-`Destructure` and `Restructure` traits.
+`Destructure` and `Restructure` traits:
+
+```rust
+use munge::{Destructure, Restructure, Move, munge};
+
+pub struct Invariant<T>(T);
+
+impl<T> Invariant<T> {
+    /// # Safety
+    ///
+    /// `value` must uphold my custom invariant.
+    pub unsafe fn new_unchecked(value: T) -> Self {
+        Self(value)
+    }
+
+    pub fn unwrap(self) -> T {
+        self.0
+    }
+}
+
+// SAFETY:
+// - `Invariant<T>` is destructured by move, so its `Destructuring` type is
+//   `Move`.
+// - `underlying` returns a pointer to its inner type, so it is guaranteed
+//   to be non-null, properly aligned, and valid for reads.
+unsafe impl<T> Destructure for Invariant<T> {
+    type Underlying = T;
+    type Destructuring = Move;
+
+    fn underlying(&mut self) -> *mut Self::Underlying {
+        &mut self.0 as *mut Self::Underlying
+    }
+}
+
+// SAFETY: `restructure` returns an `Invariant<U>` that takes ownership of
+// the restructured field because `Invariant<T>` is destructured by move.
+unsafe impl<T, U> Restructure<U> for Invariant<T> {
+    type Restructured = Invariant<U>;
+
+    unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
+        // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
+        // subfield of some `T`, so it must be properly aligned, valid for
+        // reads, and initialized. We may move the fields because the
+        // destructuring type for `Invariant<T>` is `Move`.
+        let value = unsafe { ptr.read() };
+        Invariant(value)
+    }
+}
+
+// SAFETY: `(1, 2, 3)` upholds my custom invariant.
+let value = unsafe { Invariant::new_unchecked((1, 2, 3)) };
+munge!(let (one, two, three) = value);
+assert_eq!(one.unwrap(), 1);
+assert_eq!(two.unwrap(), 2);
+assert_eq!(three.unwrap(), 3);
+```
+

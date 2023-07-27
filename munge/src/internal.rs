@@ -22,9 +22,9 @@ pub trait Test<'a> {
     type Test;
 }
 
-pub struct Ref<T>(T);
+pub struct Borrow<T>(T);
 
-impl<T: Destructure> Destructurer for Ref<T> {
+impl<T: Destructure> Destructurer for Borrow<T> {
     type Inner = T;
 
     fn new(inner: T) -> Self {
@@ -40,13 +40,13 @@ impl<T: Destructure> Destructurer for Ref<T> {
     }
 }
 
-impl<'a, T: 'a + Destructure> Test<'a> for Ref<T> {
+impl<'a, T: 'a + Destructure> Test<'a> for Borrow<T> {
     type Test = &'a T::Underlying;
 }
 
-pub struct Value<T>(ManuallyDrop<T>);
+pub struct Move<T>(ManuallyDrop<T>);
 
-impl<T: Destructure> Destructurer for Value<T> {
+impl<T: Destructure> Destructurer for Move<T> {
     type Inner = T;
 
     fn new(inner: T) -> Self {
@@ -62,7 +62,7 @@ impl<T: Destructure> Destructurer for Value<T> {
     }
 }
 
-impl<'a, T: 'a + Destructure> Test<'a> for Value<T>
+impl<'a, T: 'a + Destructure> Test<'a> for Move<T>
 where
     T::Underlying: Sized,
 {

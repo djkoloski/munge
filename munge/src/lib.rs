@@ -2,10 +2,10 @@
 //! `UnsafeCell`s, `ManuallyDrop`s and more.
 //!
 //! Just use the `munge!` macro to destructure opaque types the same way you'd
-//! destructure a value. The `munge!` macro may be used to perform both
-//! reference destructuring (e.g. `let (a, b) = c` where `c` is a reference) and
-//! value destructuring (e.g. `let (a, b) = c` where `c` is a value) if the
-//! destructured type supports it.
+//! destructure a value. The `munge!` macro may be used to perform either borrow
+//! destructuring (e.g. `let (a, b) = c` where `c` is a reference) or move
+//! destructuring (e.g. `let (a, b) = c` where `c` is a value) depending on the
+//! type.
 //!
 //! `munge` has no features and is always `#![no_std]`.
 //!
@@ -78,8 +78,7 @@
 //! [`Destructure`] and [`Restructure`] traits:
 //!
 //! ```rust
-//! use munge::{Destructure, Restructure, Value, munge};
-//!
+//! use munge::{Destructure, Restructure, Move, munge};
 //!
 //! pub struct Invariant<T>(T);
 //!
@@ -97,13 +96,13 @@
 //! }
 //!
 //! // SAFETY:
-//! // - `Invariant<T>` is destructured by value, so its `Destructuring` type is
-//! //   `Value`.
+//! // - `Invariant<T>` is destructured by move, so its `Destructuring` type is
+//! //   `Move`.
 //! // - `underlying` returns a pointer to its inner type, so it is guaranteed
 //! //   to be non-null, properly aligned, and valid for reads.
 //! unsafe impl<T> Destructure for Invariant<T> {
 //!     type Underlying = T;
-//!     type Destructuring = Value;
+//!     type Destructuring = Move;
 //!
 //!     fn underlying(&mut self) -> *mut Self::Underlying {
 //!         &mut self.0 as *mut Self::Underlying
@@ -111,7 +110,7 @@
 //! }
 //!
 //! // SAFETY: `restructure` returns an `Invariant<U>` that takes ownership of
-//! // the restructured field because `Invariant<T>` is destructured by value.
+//! // the restructured field because `Invariant<T>` is destructured by move.
 //! unsafe impl<T, U> Restructure<U> for Invariant<T> {
 //!     type Restructured = Invariant<U>;
 //!
@@ -119,7 +118,7 @@
 //!         // SAFETY: The caller has guaranteed that `ptr` is a pointer to a
 //!         // subfield of some `T`, so it must be properly aligned, valid for
 //!         // reads, and initialized. We may move the fields because the
-//!         // restructuring type for `Invariant<T>` is `Value`.
+//!         // destructuring type for `Invariant<T>` is `Move`.
 //!         let value = unsafe { ptr.read() };
 //!         Invariant(value)
 //!     }
@@ -187,10 +186,10 @@ macro_rules! munge {
 /// # Safety
 ///
 /// - [`Destructuring`](Destructure::Destructuring) must reflect the type of
-///   restructuring allowed for the type:
-///   - [`Ref`] if the type may be restructured by creating disjoint borrows of
+///   destructuring allowed for the type:
+///   - [`Borrow`] if the type is restructured by creating disjoint borrows of
 ///     the fields of `Underlying`.
-///   - [`Value`] if the type may be restructured by moving the fields out of
+///   - [`Move`] if the type may be restructured by moving the fields out of
 ///     the destructured `Underlying`.
 /// - [`underlying`](Destructure::underlying) must return a pointer that is
 ///   non-null, properly aligned, and valid for reads.
@@ -211,11 +210,10 @@ pub unsafe trait Destructure: Sized {
 /// [`restructure`](Restructure::restructure) must return a valid
 /// [`Restructured`](Restructure::Restructured) that upholds the invariants for
 /// its [`Destructuring`](Destructure::Destructuring):
-/// - If the type is destructured [by ref](Ref), then the `Restructured` value
-///   must behave as a disjoint borrow of a field of the underlying type.
-/// - If the type is destructured [by value](Value), then the `Restructured`
-///   value must behave as taking ownership of the fields of the underlying
-///   type.
+/// - If the type is destructured [by borrow](Borrow), then the `Restructured`
+///   value must behave as a disjoint borrow of a field of the underlying type.
+/// - If the type is destructured [by move](Move), then the `Restructured` value
+///   must behave as taking ownership of the fields of the underlying type.
 pub unsafe trait Restructure<T: ?Sized>: Destructure {
     /// The restructured version of this type.
     type Restructured;
@@ -229,26 +227,26 @@ pub unsafe trait Restructure<T: ?Sized>: Destructure {
     unsafe fn restructure(&self, ptr: *mut T) -> Self::Restructured;
 }
 
-/// Destructuring by reference.
+/// Destructuring by borrow.
 ///
 /// e.g. `let (a, b) = c` where `c` is a reference.
-pub struct Ref;
+pub struct Borrow;
 
-impl internal::Destructuring for Ref {}
+impl internal::Destructuring for Borrow {}
 
-impl<T: Destructure> internal::DestructuringFor<T> for Ref {
-    type Destructurer = internal::Ref<T>;
+impl<T: Destructure> internal::DestructuringFor<T> for Borrow {
+    type Destructurer = internal::Borrow<T>;
 }
 
-/// Destructuring by value.
+/// Destructuring by move.
 ///
 /// e.g. `let (a, b) = c` where `c` is a value.
-pub struct Value;
+pub struct Move;
 
-impl internal::Destructuring for Value {}
+impl internal::Destructuring for Move {}
 
-impl<T: Destructure> internal::DestructuringFor<T> for Value {
-    type Destructurer = internal::Value<T>;
+impl<T: Destructure> internal::DestructuringFor<T> for Move {
+    type Destructurer = internal::Move<T>;
 }
 
 #[doc(hidden)]
@@ -309,8 +307,8 @@ where
 }
 
 #[doc(hidden)]
-pub fn rest_patterns_are_ref_destructuring_only<
-    T: Destructure<Destructuring = Ref>,
+pub fn only_borrow_destructuring_may_use_rest_patterns<
+    T: Destructure<Destructuring = Borrow>,
 >(
     _: PhantomData<T>,
 ) {
@@ -699,7 +697,7 @@ mod tests {
     }
 
     #[test]
-    fn struct_partial_ref_destructuring() {
+    fn struct_borrow_partial_destructuring() {
         use ::core::cell::Cell;
 
         struct Example {
@@ -721,7 +719,7 @@ mod tests {
     }
 
     #[test]
-    fn tuple_partial_ref_destructuring() {
+    fn tuple_borrow_partial_destructuring() {
         use ::core::cell::Cell;
 
         struct Example(u32, u32);

@@ -12,13 +12,11 @@
 Munge makes it easy and safe to destructure `MaybeUninit`s, `Cell`s,
 `UnsafeCell`s, `ManuallyDrop`s, and more.
 
-Just use the `munge!` macro to destructure opaque types the same way you'd
-destructure a value. The `munge!` macro may be used to perform either borrow
-destructuring (e.g. `let (a, b) = c` where `c` is a reference) or move
-destructuring (e.g. `let (a, b) = c` where `c` is a value) depending on the
-type.
+## Documentation
 
-Munge has no features and is always `#![no_std]`.
+- [munge](https://docs.rs/munge), the core library
+- [munge_macro](https://docs.rs/munge_macro), the proc macro at the core of
+  munge.
 
 ## Examples
 

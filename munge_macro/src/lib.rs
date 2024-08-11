@@ -1,4 +1,4 @@
-//! The macro for `munge`.
+//! The proc macro at the core of munge.
 
 #![deny(
     missing_docs,

@@ -9,22 +9,15 @@
     rustdoc::missing_crate_level_docs
 )]
 
-use ::proc_macro2::TokenStream;
-use ::quote::quote;
-use ::syn::{
-    parse,
-    parse_macro_input,
+use proc_macro2::TokenStream;
+use quote::{quote, quote_spanned};
+use syn::{
+    parse, parse_macro_input,
     punctuated::Punctuated,
+    spanned::Spanned,
     token::{Eq, FatArrow, Let, Semi},
-    Error,
-    Expr,
-    Index,
-    Pat,
-    PatTupleStruct,
-    Path,
+    Error, Expr, Index, Pat, PatRest, PatTuple, PatTupleStruct, Path,
 };
-use quote::quote_spanned;
-use syn::{spanned::Spanned, PatRest, PatTuple};
 
 /// Destructures a value by projecting pointers.
 #[proc_macro]
@@ -93,13 +86,13 @@ fn parse_pat(
             let mutability = &pat_ident.mutability;
             let ident = &pat_ident.ident;
 
-            if let Some(r#ref) = pat_ident.by_ref {
+            if let Some(r#ref) = &pat_ident.by_ref {
                 return Err(Error::new_spanned(
                     r#ref,
                     "`ref` is not allowed in munge destructures",
                 ));
             }
-            if let Some((at, _)) = pat_ident.subpat {
+            if let Some((at, _)) = &pat_ident.subpat {
                 return Err(Error::new_spanned(
                     at,
                     "subpatterns are not allowed in munge destructures",

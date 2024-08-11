@@ -1,4 +1,4 @@
-use ::core::mem::ManuallyDrop;
+use core::mem::ManuallyDrop;
 
 use crate::Destructure;
 

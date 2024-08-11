@@ -1,6 +1,6 @@
-use ::core::{
+use core::{
     cell::{Cell, UnsafeCell},
-    mem::{ManuallyDrop, MaybeUninit},
+    mem::{transmute, ManuallyDrop, MaybeUninit},
     ptr::read,
 };
 
@@ -39,8 +39,8 @@ unsafe impl<T, U> Restructure<U> for MaybeUninit<T> {
 // &MaybeUninit<T>
 
 // SAFETY:
-// - `&MaybeUninit<T>` is destructured by borrow, so its `Destructuring` type
-//   is `Borrow`.
+// - `&MaybeUninit<T>` is destructured by borrow, so its `Destructuring` type is
+//   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T> Destructure for &'a MaybeUninit<T> {
@@ -147,13 +147,11 @@ unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a Cell<T> {
     type Restructured = &'a Cell<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
-        let ptr =
-            // SAFETY: `Cell<U>` is `repr(transparent)` and so guaranteed to
-            // have the same representation as the `U` it contains. Therefore,
-            // the pointer metadata for `*const Cell<U>` is the same as the
-            // metadata for `*mut U`, and transmuting between the two types is
-            // sound.
-            unsafe { ::core::mem::transmute::<*mut U, *const Cell<U>>(ptr) };
+        // SAFETY: `Cell<U>` is `repr(transparent)` and so guaranteed to have
+        // the same representation as the `U` it contains. Therefore, the
+        // pointer metadata for `*const Cell<U>` is the same as the metadata for
+        // `*mut U`, and transmuting between the two types is sound.
+        let ptr = unsafe { transmute::<*mut U, *const Cell<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `Cell<T>`, so it's safe to dereference. Because the
         // destructuring type for `&Cell<T>` is `Borrow`, we may create a
@@ -184,13 +182,11 @@ unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a mut Cell<T> {
     type Restructured = &'a mut Cell<U>;
 
     unsafe fn restructure(&self, ptr: *mut U) -> Self::Restructured {
-        let ptr =
-            // SAFETY: `Cell<U>` is `repr(transparent)` and so guaranteed to
-            // have the same representation as the `U` it contains. Therefore,
-            // the pointer metadata for `*mut Cell<U>` is the same as the
-            // metadata for `*mut U`, and transmuting between the two types is
-            // sound.
-            unsafe { ::core::mem::transmute::<*mut U, *mut Cell<U>>(ptr) };
+        // SAFETY: `Cell<U>` is `repr(transparent)` and so guaranteed to have
+        // the same representation as the `U` it contains. Therefore, the
+        // pointer metadata for `*mut Cell<U>` is the same as the metadata for
+        // `*mut U`, and transmuting between the two types is sound.
+        let ptr = unsafe { transmute::<*mut U, *mut Cell<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `Cell<T>`, so it's safe to dereference. Because the
         // destructuring type for `&mut Cell<T>` is `Borrow`, we may create a
@@ -232,8 +228,8 @@ unsafe impl<T, U> Restructure<U> for UnsafeCell<T> {
 // &UnsafeCell<T>
 
 // SAFETY:
-// - `&UnsafeCell<T>` is destructured by borrow, so its `Destructuring` type
-//   is `Borrow`.
+// - `&UnsafeCell<T>` is destructured by borrow, so its `Destructuring` type is
+//   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a UnsafeCell<T> {
@@ -260,9 +256,7 @@ where
         // pointer metadata for `*const UnsafeCell<U>` is the same as the
         // metadata for `*mut U`, and transmuting between the two types is
         // sound.
-        let ptr = unsafe {
-            ::core::mem::transmute::<*mut U, *const UnsafeCell<U>>(ptr)
-        };
+        let ptr = unsafe { transmute::<*mut U, *const UnsafeCell<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `UnsafeCell<T>`, so it's safe to dereference. Because the
         // destructuring type for `&UnsafeCell<T>` is `Borrow`, we may create a
@@ -274,8 +268,8 @@ where
 // &mut UnsafeCell<T>
 
 // SAFETY:
-// - `&mut UnsafeCell<T>` is destructured by borrow, so its `Destructuring`
-//   type is `Borrow`.
+// - `&mut UnsafeCell<T>` is destructured by borrow, so its `Destructuring` type
+//   is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a mut UnsafeCell<T> {
@@ -301,9 +295,7 @@ where
         // have the same representation as the `U` it contains. Therefore, the
         // pointer metadata for `*mut UnsafeCell<U>` is the same as the metadata
         // for `*mut U`, and transmuting between the two types is sound.
-        let ptr = unsafe {
-            ::core::mem::transmute::<*mut U, *mut UnsafeCell<U>>(ptr)
-        };
+        let ptr = unsafe { transmute::<*mut U, *mut UnsafeCell<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `UnsafeCell<T>`, so it's safe to dereference. Because the
         // destructuring type for `&mut UnsafeCell<T>` is `Borrow`, we may
@@ -345,8 +337,8 @@ unsafe impl<T, U> Restructure<U> for ManuallyDrop<T> {
 // &ManuallyDrop<T>
 
 // SAFETY:
-// - `&ManuallyDrop<T>` is destructured by borrow, so its `Destructuring`
-//   type is `Borrow`.
+// - `&ManuallyDrop<T>` is destructured by borrow, so its `Destructuring` type
+//   is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
 unsafe impl<'a, T: ?Sized> Destructure for &'a ManuallyDrop<T> {
@@ -373,9 +365,7 @@ where
         // pointer metadata for `*const ManuallyDrop<U>` is the same as the
         // metadata for `*mut U`, and transmuting between the two types is
         // sound.
-        let ptr = unsafe {
-            ::core::mem::transmute::<*mut U, *const ManuallyDrop<U>>(ptr)
-        };
+        let ptr = unsafe { transmute::<*mut U, *const ManuallyDrop<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `ManuallyDrop<T>`, so it's safe to dereference. Because the
         // destructuring type for `&ManuallyDrop<T>` is `Borrow`, we may create
@@ -416,9 +406,7 @@ where
         // pointer metadata for `*mut ManuallyDrop<U>` is the same as the
         // metadata for `*mut U`, and transmuting between the two types is
         // sound.
-        let ptr = unsafe {
-            ::core::mem::transmute::<*mut U, *mut ManuallyDrop<U>>(ptr)
-        };
+        let ptr = unsafe { transmute::<*mut U, *mut ManuallyDrop<U>>(ptr) };
         // SAFETY: The caller has guaranteed that `ptr` points to a subfield of
         // some `ManuallyDrop<T>`, so it's safe to dereference. Because the
         // destructuring type for `&mut ManuallyDrop<T>` is `Borrow`, we may

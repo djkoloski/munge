@@ -1,4 +1,4 @@
-use ::core::{hint::unreachable_unchecked, marker::PhantomData};
+use core::{hint::unreachable_unchecked, marker::PhantomData};
 
 use crate::{internal, Borrow, Destructure, Restructure};
 

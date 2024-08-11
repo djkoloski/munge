@@ -1,6 +1,15 @@
 # `munge`
 
-`munge` makes it easy and safe to destructure `MaybeUninit`s, `Cell`s,
+[![crates.io badge]][crates.io] [![docs badge]][docs] [![license badge]][license]
+
+[crates.io badge]: https://img.shields.io/crates/v/munge.svg
+[crates.io]: https://crates.io/crates/munge
+[docs badge]: https://img.shields.io/docsrs/munge
+[docs]: https://docs.rs/munge
+[license badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[license]: https://github.com/rkyv/munge/blob/master/LICENSE
+
+Munge makes it easy and safe to destructure `MaybeUninit`s, `Cell`s,
 `UnsafeCell`s, `ManuallyDrop`s, and more.
 
 Just use the `munge!` macro to destructure opaque types the same way you'd
@@ -9,17 +18,15 @@ destructuring (e.g. `let (a, b) = c` where `c` is a reference) or move
 destructuring (e.g. `let (a, b) = c` where `c` is a value) depending on the
 type.
 
-`munge` has no features and is always `#![no_std]`.
+Munge has no features and is always `#![no_std]`.
 
 ## Examples
 
-`munge` makes it easy to initialize `MaybeUninit`s:
+Initialize `MaybeUninit`s:
 
 ```rust
-use {
-    ::core::mem::MaybeUninit,
-    ::munge::munge,
-};
+use core::mem::MaybeUninit;
+use munge::munge;
 
 pub struct Example {
     a: u32,
@@ -42,13 +49,11 @@ assert_eq!(init.b.0, 'x');
 assert_eq!(init.b.1, 3.14);
 ```
 
-It can also be used to destructure `Cell`s:
+Destructure `Cell`s:
 
 ```rust
-use {
-    ::core::cell::Cell,
-    ::munge::munge,
-};
+use core::cell::Cell;
+use munge::munge;
 
 pub struct Example {
     a: u32,
@@ -75,7 +80,7 @@ assert_eq!(value.b.0, '!');
 assert_eq!(value.b.1, 1.41);
 ```
 
-You can even extend `munge` to work with your own types by implementing its
+You can even extend munge to work with your own types by implementing its
 `Destructure` and `Restructure` traits:
 
 ```rust

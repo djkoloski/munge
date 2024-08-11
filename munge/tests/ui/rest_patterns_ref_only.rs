@@ -1,7 +1,5 @@
-use {
-    ::core::mem::MaybeUninit,
-    ::munge::munge,
-};
+use core::mem::MaybeUninit;
+use munge::munge;
 
 fn main() {
     struct Struct {

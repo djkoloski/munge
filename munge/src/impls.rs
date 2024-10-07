@@ -43,7 +43,7 @@ unsafe impl<T, U> Restructure<U> for MaybeUninit<T> {
 //   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T> Destructure for &'a MaybeUninit<T> {
+unsafe impl<T> Destructure for &MaybeUninit<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 
@@ -73,7 +73,7 @@ unsafe impl<'a, T, U: 'a> Restructure<U> for &'a MaybeUninit<T> {
 //   type is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T> Destructure for &'a mut MaybeUninit<T> {
+unsafe impl<T> Destructure for &mut MaybeUninit<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 
@@ -132,7 +132,7 @@ unsafe impl<T, U> Restructure<U> for Cell<T> {
 //   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T: ?Sized> Destructure for &'a Cell<T> {
+unsafe impl<T: ?Sized> Destructure for &Cell<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 
@@ -167,7 +167,7 @@ unsafe impl<'a, T: ?Sized, U: 'a + ?Sized> Restructure<U> for &'a Cell<T> {
 //   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T: ?Sized> Destructure for &'a mut Cell<T> {
+unsafe impl<T: ?Sized> Destructure for &mut Cell<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 
@@ -232,7 +232,7 @@ unsafe impl<T, U> Restructure<U> for UnsafeCell<T> {
 //   `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T: ?Sized> Destructure for &'a UnsafeCell<T> {
+unsafe impl<T: ?Sized> Destructure for &UnsafeCell<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 
@@ -272,7 +272,7 @@ where
 //   is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T: ?Sized> Destructure for &'a mut UnsafeCell<T> {
+unsafe impl<T: ?Sized> Destructure for &mut UnsafeCell<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 
@@ -341,7 +341,7 @@ unsafe impl<T, U> Restructure<U> for ManuallyDrop<T> {
 //   is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T: ?Sized> Destructure for &'a ManuallyDrop<T> {
+unsafe impl<T: ?Sized> Destructure for &ManuallyDrop<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 
@@ -381,7 +381,7 @@ where
 //   type is `Borrow`.
 // - `underlying` returns a pointer to its inner type, so it is guaranteed to be
 //   non-null, properly aligned, and valid for reads.
-unsafe impl<'a, T: ?Sized> Destructure for &'a mut ManuallyDrop<T> {
+unsafe impl<T: ?Sized> Destructure for &mut ManuallyDrop<T> {
     type Underlying = T;
     type Destructuring = Borrow;
 

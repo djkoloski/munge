@@ -1,6 +1,6 @@
 use core::{
     cell::{Cell, UnsafeCell},
-    mem::{transmute, ManuallyDrop, MaybeUninit},
+    mem::{ManuallyDrop, MaybeUninit, transmute},
     ptr::read,
 };
 

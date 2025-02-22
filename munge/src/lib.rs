@@ -377,8 +377,8 @@ mod tests {
         // SAFETY: `mu` is completely initialized.
         let init = unsafe { mu.assume_init() };
         assert_eq!(init.0, 1);
-        assert_eq!(init.1 .0, 2);
-        assert_eq!(init.1 .1, 'a');
+        assert_eq!(init.1.0, 2);
+        assert_eq!(init.1.1, 'a');
     }
 
     #[test]

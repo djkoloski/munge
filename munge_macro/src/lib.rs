@@ -12,11 +12,11 @@
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::{
-    parse, parse_macro_input,
+    Error, Expr, FieldPat, Index, Pat, PatIdent, PatRest, PatSlice, PatStruct,
+    PatTuple, PatTupleStruct, Path, parse, parse_macro_input,
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Eq, FatArrow, Let, Semi},
-    Error, Expr, Index, Pat, PatRest, PatTuple, PatTupleStruct, Path,
 };
 
 /// Destructures a value by projecting pointers.
@@ -209,8 +209,81 @@ fn parse_pat(
             return Err(Error::new_spanned(
                 pat,
                 "expected a destructuring pattern",
-            ))
+            ));
         }
+    })
+}
+
+fn strip_mut(pat: &Pat) -> Result<Pat, Error> {
+    Ok(match pat {
+        Pat::Ident(pat_ident) => Pat::Ident(PatIdent {
+            attrs: pat_ident.attrs.clone(),
+            by_ref: None,
+            mutability: None,
+            ident: pat_ident.ident.clone(),
+            subpat: if let Some((at, pat)) = pat_ident.subpat.as_ref() {
+                Some((*at, Box::new(strip_mut(pat)?)))
+            } else {
+                None
+            },
+        }),
+        Pat::Tuple(pat_tuple) => {
+            let mut elems = Punctuated::new();
+            for elem in pat_tuple.elems.iter() {
+                elems.push(strip_mut(elem)?);
+            }
+            Pat::Tuple(PatTuple {
+                attrs: pat_tuple.attrs.clone(),
+                paren_token: pat_tuple.paren_token,
+                elems,
+            })
+        }
+        Pat::TupleStruct(pat_tuple_struct) => {
+            let mut elems = Punctuated::new();
+            for elem in pat_tuple_struct.elems.iter() {
+                elems.push(strip_mut(elem)?);
+            }
+            Pat::TupleStruct(PatTupleStruct {
+                attrs: pat_tuple_struct.attrs.clone(),
+                qself: pat_tuple_struct.qself.clone(),
+                path: pat_tuple_struct.path.clone(),
+                paren_token: pat_tuple_struct.paren_token,
+                elems,
+            })
+        }
+        Pat::Slice(pat_slice) => {
+            let mut elems = Punctuated::new();
+            for elem in pat_slice.elems.iter() {
+                elems.push(strip_mut(elem)?);
+            }
+            Pat::Slice(PatSlice {
+                attrs: pat_slice.attrs.clone(),
+                bracket_token: pat_slice.bracket_token,
+                elems,
+            })
+        }
+        Pat::Struct(pat_struct) => {
+            let mut fields = Punctuated::new();
+            for field in pat_struct.fields.iter() {
+                fields.push(FieldPat {
+                    attrs: field.attrs.clone(),
+                    member: field.member.clone(),
+                    colon_token: field.colon_token,
+                    pat: Box::new(strip_mut(&field.pat)?),
+                });
+            }
+            Pat::Struct(PatStruct {
+                attrs: pat_struct.attrs.clone(),
+                qself: pat_struct.qself.clone(),
+                path: pat_struct.path.clone(),
+                brace_token: pat_struct.brace_token,
+                fields,
+                rest: pat_struct.rest.clone(),
+            })
+        }
+        Pat::Rest(pat_rest) => Pat::Rest(pat_rest.clone()),
+        Pat::Wild(pat_wild) => Pat::Wild(pat_wild.clone()),
+        _ => todo!(),
     })
 }
 
@@ -221,6 +294,8 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
     for destructure in input.destructures.iter() {
         let pat = &destructure.pat;
         let expr = &destructure.expr;
+
+        let test_pat = strip_mut(pat)?;
 
         let (bindings, exprs) = parse_pat(crate_path, pat)?;
 
@@ -244,9 +319,10 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                         // SAFETY: This can never be called.
                         unsafe {
                             ::core::hint::unreachable_unchecked();
-                            let #pat = #crate_path::__macro::test_destructurer(
-                                &mut destructurer,
-                            );
+                            let #test_pat =
+                                #crate_path::__macro::test_destructurer(
+                                    &mut destructurer,
+                                );
                         }
                     }
 

@@ -12,11 +12,12 @@
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::{
-    Error, Expr, FieldPat, Index, Pat, PatIdent, PatRest, PatSlice, PatStruct,
-    PatTuple, PatTupleStruct, Path, parse, parse_macro_input,
+    parse, parse_macro_input,
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Eq, FatArrow, Let, Semi},
+    Error, Expr, FieldPat, Index, Pat, PatIdent, PatRest, PatSlice, PatStruct,
+    PatTuple, PatTupleStruct, Path,
 };
 
 /// Destructures a value by projecting pointers.

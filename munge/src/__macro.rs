@@ -1,6 +1,6 @@
 use core::{hint::unreachable_unchecked, marker::PhantomData};
 
-use crate::{Borrow, Destructure, Restructure, internal};
+use crate::{internal, Borrow, Destructure, Restructure};
 
 pub fn make_destructurer<T: Destructure>(
     value: T,

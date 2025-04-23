@@ -150,7 +150,7 @@ impl<T: Destructure> internal::DestructuringFor<T> for Move {
 
 #[cfg(test)]
 mod tests {
-    use core::mem::MaybeUninit;
+    use core::{cell::Cell, mem::MaybeUninit};
 
     #[test]
     fn project_tuple() {
@@ -569,5 +569,47 @@ mod tests {
         assert_eq!(c.get(), 2);
         c.set(3);
         assert_eq!(c.get(), 3);
+    }
+
+    struct NoisyDrop<'a> {
+        flag: &'a mut bool,
+    }
+
+    impl Drop for NoisyDrop<'_> {
+        fn drop(&mut self) {
+            *self.flag = true;
+        }
+    }
+
+    #[test]
+    fn moved_tuple_wildcard_pattern_is_dropped() {
+        let mut flag = false;
+        let value = Cell::new((NoisyDrop { flag: &mut flag },));
+
+        munge!(let (_,) = value);
+
+        assert!(flag);
+    }
+
+    #[test]
+    fn moved_tuple_struct_wildcard_pattern_is_dropped() {
+        struct Example<'a>(NoisyDrop<'a>);
+
+        let mut flag = false;
+        let value = Cell::new(Example(NoisyDrop { flag: &mut flag }));
+
+        munge!(let Example(_) = value);
+
+        assert!(flag);
+    }
+
+    #[test]
+    fn moved_array_wildcard_pattern_is_dropped() {
+        let mut flag = false;
+        let value = Cell::new([NoisyDrop { flag: &mut flag }]);
+
+        munge!(let [_] = value);
+
+        assert!(flag);
     }
 }

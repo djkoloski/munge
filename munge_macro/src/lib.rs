@@ -204,7 +204,19 @@ fn parse_pat(
         Pat::Rest(pat_rest) => rest_check(crate_path, pat_rest),
         Pat::Wild(pat_wild) => {
             let token = &pat_wild.underscore_token;
-            (quote! { #token }, quote! {})
+            (
+                quote! { #token },
+                quote! {
+                    // SAFETY: `ptr` is a properly-aligned pointer to a subfield
+                    // of the pointer underlying `destructurer`.
+                    unsafe {
+                        #crate_path::__macro::restructure_destructurer(
+                            &destructurer,
+                            ptr,
+                        )
+                    }
+                },
+            )
         }
         _ => {
             return Err(Error::new_spanned(

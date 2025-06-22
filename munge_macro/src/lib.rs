@@ -243,7 +243,8 @@ fn strip_mut(pat: &Pat) -> Result<Pat, Error> {
         Pat::Tuple(pat_tuple) => {
             let mut elems = Punctuated::new();
             for elem in pat_tuple.elems.iter() {
-                elems.push(strip_mut(elem)?);
+                elems.push_value(strip_mut(elem)?);
+                elems.push_punct(Default::default());
             }
             Pat::Tuple(PatTuple {
                 attrs: pat_tuple.attrs.clone(),

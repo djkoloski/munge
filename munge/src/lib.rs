@@ -612,4 +612,34 @@ mod tests {
 
         assert!(flag);
     }
+
+    #[test]
+    fn rest_in_full_tuple_pattern() {
+        let (_, _, ..) = (1, 2);
+
+        let value = Cell::new((1, 2));
+        munge!(let (_, _, ..) = &value);
+
+        let [_, _, ..] = [1, 2];
+
+        let value = Cell::new([1, 2]);
+        munge!(let [_, _, ..] = &value);
+
+        struct Foo(i32, i32);
+
+        let Foo(_, _, ..) = Foo(1, 2);
+
+        let value = Cell::new(Foo(1, 2));
+        munge!(let Foo(_, _, ..) = &value);
+
+        struct Bar {
+            a: i32,
+            b: i32,
+        }
+
+        let Bar { a: _, b: _, .. } = Bar { a: 1, b: 2 };
+
+        let value = Cell::new(Bar { a: 1, b: 2 });
+        munge!(let Bar { a: _, b: _, .. } = &value);
+    }
 }

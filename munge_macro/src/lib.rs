@@ -65,17 +65,16 @@ impl parse::Parse for Destructure {
     }
 }
 
-fn rest_check(crate_path: &Path, rest: &PatRest) -> (TokenStream, TokenStream) {
+fn make_rest_check(crate_path: &Path, rest: &PatRest) -> TokenStream {
     let span = rest.dot2_token.span();
     let destructurer = quote! { destructurer };
 
-    let expr = quote_spanned! { span => {
+    quote_spanned! { span => {
         let phantom = #crate_path::__macro::get_destructure(&#destructurer);
         #crate_path::__macro::only_borrow_destructuring_may_use_rest_patterns(
             phantom
         )
-    } };
-    (quote_spanned! { span => _ }, expr)
+    } }
 }
 
 fn parse_pat(
@@ -126,8 +125,16 @@ fn parse_pat(
         }
         Pat::Tuple(PatTuple { elems, .. })
         | Pat::TupleStruct(PatTupleStruct { elems, .. }) => {
+            let rest_check = elems.iter().find_map(|e| {
+                if let Pat::Rest(rest) = e {
+                    Some(make_rest_check(crate_path, rest))
+                } else {
+                    None
+                }
+            });
             let parsed = elems
                 .iter()
+                .filter(|e| !matches!(e, Pat::Rest(_)))
                 .map(|e| parse_pat(crate_path, e))
                 .collect::<Result<Vec<_>, Error>>()?;
             let (bindings, (exprs, indices)) = parsed
@@ -138,6 +145,7 @@ fn parse_pat(
             (
                 quote! { (#(#bindings,)*) },
                 quote! { {
+                    #rest_check
                     #test
 
                     ( #({
@@ -153,9 +161,17 @@ fn parse_pat(
             )
         }
         Pat::Slice(pat_slice) => {
+            let rest_check = pat_slice.elems.iter().find_map(|e| {
+                if let Pat::Rest(rest) = e {
+                    Some(make_rest_check(crate_path, rest))
+                } else {
+                    None
+                }
+            });
             let parsed = pat_slice
                 .elems
                 .iter()
+                .filter(|e| !matches!(e, Pat::Rest(_)))
                 .map(|e| parse_pat(crate_path, e))
                 .collect::<Result<Vec<_>, Error>>()?;
             let (bindings, (exprs, indices)) = parsed
@@ -166,6 +182,7 @@ fn parse_pat(
             (
                 quote! { (#(#bindings,)*) },
                 quote! { {
+                    #rest_check
                     #test
 
                     ( #({
@@ -191,20 +208,17 @@ fn parse_pat(
             let (members, (bindings, exprs)) =
                 parsed.into_iter().unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
 
-            let (rest_binding, rest_expr) = if let Some(rest) = &pat_struct.rest
-            {
-                let (binding, expr) = rest_check(crate_path, rest);
-                (Some(binding), Some(expr))
-            } else {
-                (None, None)
-            };
+            let rest_check = pat_struct
+                .rest
+                .as_ref()
+                .map(|rest| make_rest_check(crate_path, rest));
 
             (
                 quote! { (
                     #(#bindings,)*
-                    #rest_binding
                 ) },
                 quote! { {
+                    #rest_check
                     #test
 
                     ( #({
@@ -215,11 +229,13 @@ fn parse_pat(
                         };
 
                         #exprs
-                    },)* #rest_expr )
+                    },)* )
                 } },
             )
         }
-        Pat::Rest(pat_rest) => rest_check(crate_path, pat_rest),
+        Pat::Rest(_) => unreachable!(
+            "rest patterns only occur in tuples, tuple structs, and slices"
+        ),
         Pat::Wild(pat_wild) => {
             let token = &pat_wild.underscore_token;
             (

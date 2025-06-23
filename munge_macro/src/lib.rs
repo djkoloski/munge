@@ -82,6 +82,14 @@ fn parse_pat(
     crate_path: &Path,
     pat: &Pat,
 ) -> Result<(TokenStream, TokenStream), Error> {
+    let test_ident = quote_spanned!(pat.span() => test);
+    let test_ident_ref = quote_spanned!(pat.span() => &test);
+    let test = quote! {
+        let #test_ident =
+            #crate_path::__macro::IsReference::for_ptr(ptr).test();
+        let _: &dyn #crate_path::__macro::MustBeAValue = #test_ident_ref;
+    };
+
     Ok(match pat {
         Pat::Ident(pat_ident) => {
             let mutability = &pat_ident.mutability;
@@ -103,6 +111,8 @@ fn parse_pat(
             (
                 quote! { #mutability #ident },
                 quote! {
+                    #test
+
                     // SAFETY: `ptr` is a properly-aligned pointer to a subfield
                     // of the pointer underlying `destructurer`.
                     unsafe {
@@ -127,16 +137,19 @@ fn parse_pat(
                 .unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
             (
                 quote! { (#(#bindings,)*) },
-                quote! { (
-                    #({
+                quote! { {
+                    #test
+
+                    ( #({
                         // SAFETY: `ptr` is guaranteed to always be non-null,
                         // properly-aligned, and valid for reads.
                         let ptr = unsafe {
                             ::core::ptr::addr_of_mut!((*ptr).#indices)
                         };
+
                         #exprs
-                    },)*
-                ) },
+                    },)* )
+                } },
             )
         }
         Pat::Slice(pat_slice) => {
@@ -152,16 +165,19 @@ fn parse_pat(
                 .unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
             (
                 quote! { (#(#bindings,)*) },
-                quote! { (
-                    #({
+                quote! { {
+                    #test
+
+                    ( #({
                         // SAFETY: `ptr` is guaranteed to always be non-null,
                         // properly-aligned, and valid for reads.
                         let ptr = unsafe {
                             ::core::ptr::addr_of_mut!((*ptr)[#indices])
                         };
+
                         #exprs
-                    },)*
-                ) },
+                    },)* )
+                } },
             )
         }
         Pat::Struct(pat_struct) => {
@@ -188,17 +204,19 @@ fn parse_pat(
                     #(#bindings,)*
                     #rest_binding
                 ) },
-                quote! { (
-                    #({
+                quote! { {
+                    #test
+
+                    ( #({
                         // SAFETY: `ptr` is guaranteed to always be non-null,
                         // properly-aligned, and valid for reads.
                         let ptr = unsafe {
                             ::core::ptr::addr_of_mut!((*ptr).#members)
                         };
+
                         #exprs
-                    },)*
-                    #rest_expr
-                ) },
+                    },)* #rest_expr )
+                } },
             )
         }
         Pat::Rest(pat_rest) => rest_check(crate_path, pat_rest),
@@ -207,6 +225,8 @@ fn parse_pat(
             (
                 quote! { #token },
                 quote! {
+                    #test
+
                     // SAFETY: `ptr` is a properly-aligned pointer to a subfield
                     // of the pointer underlying `destructurer`.
                     unsafe {
@@ -324,6 +344,8 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                     clippy::undocumented_unsafe_blocks,
                 )]
                 {
+                    use #crate_path::__macro::MaybeReference as _;
+
                     let ptr = #crate_path::__macro::destructurer_ptr(
                         &mut destructurer
                     );

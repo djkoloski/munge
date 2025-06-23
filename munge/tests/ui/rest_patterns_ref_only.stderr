@@ -1,33 +1,17 @@
-error[E0271]: type mismatch resolving `<MaybeUninit<Struct> as Destructure>::Destructuring == Borrow`
-  --> tests/ui/rest_patterns_ref_only.rs:12:28
+error[E0277]: munge may not destructure a rest pattern by move
+  --> tests/ui/rest_patterns_ref_only.rs:17:28
    |
-12 |     munge!(let Struct { a, .. } = mu);
-   |     -----------------------^^--------
-   |     |                      |
-   |     |                      expected `Borrow`, found `Move`
-   |     required by a bound introduced by this call
+17 |     munge!(let Struct { a, .. } = mu);
+   |                            ^^ this rest pattern requires destructuring by borrow
    |
-note: required by a bound in `only_borrow_destructuring_may_use_rest_patterns`
-  --> src/__macro.rs
-   |
-   | pub fn only_borrow_destructuring_may_use_rest_patterns<
-   |        ----------------------------------------------- required by a bound in this function
-   |     T: Destructure<Destructuring = Borrow>,
-   |                    ^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `only_borrow_destructuring_may_use_rest_patterns`
+   = help: the trait `MustBeBorrow` is not implemented for `Move`
+   = note: required for the cast from `&Move` to `&dyn MustBeBorrow`
 
-error[E0271]: type mismatch resolving `<MaybeUninit<Tuple> as Destructure>::Destructuring == Borrow`
-  --> tests/ui/rest_patterns_ref_only.rs:18:25
+error[E0277]: munge may not destructure a rest pattern by move
+  --> tests/ui/rest_patterns_ref_only.rs:25:25
    |
-18 |     munge!(let Tuple(a, ..) = mu);
-   |     --------------------^^-------
-   |     |                   |
-   |     |                   expected `Borrow`, found `Move`
-   |     required by a bound introduced by this call
+25 |     munge!(let Tuple(a, ..) = mu);
+   |                         ^^ this rest pattern requires destructuring by borrow
    |
-note: required by a bound in `only_borrow_destructuring_may_use_rest_patterns`
-  --> src/__macro.rs
-   |
-   | pub fn only_borrow_destructuring_may_use_rest_patterns<
-   |        ----------------------------------------------- required by a bound in this function
-   |     T: Destructure<Destructuring = Borrow>,
-   |                    ^^^^^^^^^^^^^^^^^^^^^^ required by this bound in `only_borrow_destructuring_may_use_rest_patterns`
+   = help: the trait `MustBeBorrow` is not implemented for `Move`
+   = note: required for the cast from `&Move` to `&dyn MustBeBorrow`

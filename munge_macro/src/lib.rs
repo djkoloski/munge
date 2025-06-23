@@ -70,10 +70,13 @@ fn make_rest_check(crate_path: &Path, rest: &PatRest) -> TokenStream {
     let destructurer = quote! { destructurer };
 
     quote_spanned! { span => {
-        let phantom = #crate_path::__macro::get_destructure(&#destructurer);
-        #crate_path::__macro::only_borrow_destructuring_may_use_rest_patterns(
-            phantom
-        )
+        if false {
+            let ptr = #crate_path::__macro::get_destructuring_ptr(
+                &#destructurer
+            );
+            // SAFETY: This code can never be called.
+            let _ = unsafe { &*ptr } as &dyn #crate_path::__macro::MustBeBorrow;
+        }
     } }
 }
 

@@ -49,18 +49,23 @@ where
     }
 }
 
-pub fn get_destructure<T>(_: &T) -> PhantomData<T::Inner>
+#[diagnostic::on_unimplemented(
+    message = "munge may not destructure a rest pattern by move",
+    label = "this rest pattern requires destructuring by borrow"
+)]
+pub trait MustBeBorrow {}
+
+#[diagnostic::do_not_recommend]
+impl MustBeBorrow for Borrow {}
+
+pub fn get_destructuring_ptr<T>(
+    _: &T,
+) -> *const <T::Inner as Destructure>::Destructuring
 where
     T: internal::Destructurer,
+    T::Inner: Destructure,
 {
-    PhantomData
-}
-
-pub fn only_borrow_destructuring_may_use_rest_patterns<
-    T: Destructure<Destructuring = Borrow>,
->(
-    _: PhantomData<T>,
-) {
+    core::ptr::null()
 }
 
 pub struct Value;

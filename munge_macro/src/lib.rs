@@ -372,13 +372,13 @@ fn destructure(input: Input) -> Result<TokenStream, Error> {
                     #[allow(unreachable_code, unused_variables)]
                     if false {
                         // SAFETY: This can never be called.
-                        unsafe {
-                            ::core::hint::unreachable_unchecked();
-                            let #test_pat =
-                                #crate_path::__macro::test_destructurer(
-                                    &mut destructurer,
-                                );
-                        }
+                        unsafe { ::core::hint::unreachable_unchecked() };
+                        // SAFETY: This can never be called.
+                        let #test_pat = unsafe {
+                            #crate_path::__macro::test_destructurer(
+                                &mut destructurer,
+                            )
+                        };
                     }
 
                     #exprs

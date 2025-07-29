@@ -35,7 +35,13 @@ mod internal;
 #[doc(hidden)]
 pub use munge_macro::munge_with_path;
 
-/// Destructures a type into
+/// Destructures a type using a pattern.
+///
+/// To prevent unsound union destructurings, this macro emits field accesses
+/// which fail to compile in safe Rust. However, if `munge!` is used inside of
+/// an `unsafe` block, these accesses will compile without emitting an error.
+/// This matches the behavior of regular destructuring, but may be surprising in
+/// some situations.
 ///
 /// # Example
 ///

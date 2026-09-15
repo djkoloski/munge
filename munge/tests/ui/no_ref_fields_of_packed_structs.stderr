@@ -1,5 +1,5 @@
 error[E0793]: reference to field of packed struct is unaligned
-  --> tests/ui/packed.rs:14:60
+  --> tests/ui/no_ref_fields_of_packed_structs.rs:14:60
    |
 14 |         let Misalign { byte: a, inner: Misalign { byte: b, inner } } = &mut mu;
    |                                                            ^^^^^
@@ -9,7 +9,7 @@ error[E0793]: reference to field of packed struct is unaligned
    = help: copy the field contents to a local variable, or replace the reference with a raw pointer and use `read_unaligned`/`write_unaligned` (loads and stores via `*p` must be properly aligned even when using raw pointers)
 
 error[E0793]: reference to field of packed struct is unaligned
-  --> tests/ui/packed.rs:24:5
+  --> tests/ui/no_ref_fields_of_packed_structs.rs:24:5
    |
 24 |     assert_eq!(init.inner.inner, 3);
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -17,4 +17,3 @@ error[E0793]: reference to field of packed struct is unaligned
    = note: this struct is 1-byte aligned, but the type of this field may require higher alignment
    = note: creating a misaligned reference is undefined behavior (even if that reference is never dereferenced)
    = help: copy the field contents to a local variable, or replace the reference with a raw pointer and use `read_unaligned`/`write_unaligned` (loads and stores via `*p` must be properly aligned even when using raw pointers)
-   = note: this error originates in the macro `assert_eq` (in Nightly builds, run with -Z macro-backtrace for more info)

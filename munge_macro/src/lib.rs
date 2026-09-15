@@ -75,7 +75,7 @@ fn make_rest_check(crate_path: &Path, rest: &PatRest) -> TokenStream {
                 &#destructurer
             );
             // SAFETY: This code can never be called.
-            let _ = unsafe { &*ptr } as &dyn #crate_path::__macro::MustBeBorrow;
+            let _ = ptr as *const dyn #crate_path::__macro::MustBeBorrow;
         }
     } }
 }
@@ -85,11 +85,11 @@ fn parse_pat(
     pat: &Pat,
 ) -> Result<(TokenStream, TokenStream), Error> {
     let test_ident = quote_spanned!(pat.span() => test);
-    let test_ident_ref = quote_spanned!(pat.span() => &test);
+    let test_ident_ref = quote_spanned!(pat.span() => (&test as *const _));
     let test = quote! {
         let #test_ident =
             #crate_path::__macro::IsReference::for_ptr(ptr).test();
-        let _: &dyn #crate_path::__macro::MustBeAValue = #test_ident_ref;
+        let _: *const dyn #crate_path::__macro::MustBeAValue = #test_ident_ref;
     };
 
     Ok(match pat {

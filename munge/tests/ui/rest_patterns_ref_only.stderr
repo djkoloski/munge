@@ -4,8 +4,14 @@ error[E0277]: munge may not destructure a rest pattern by move
 17 |     munge!(let Struct { a, .. } = mu);
    |                            ^^ this rest pattern requires destructuring by borrow
    |
-   = help: the trait `MustBeBorrow` is not implemented for `Move`
-   = note: required for the cast from `&Move` to `&dyn MustBeBorrow`
+   = help: within `Move`, the trait `munge::__macro::MustBeBorrow` is not implemented for `Move`
+note: required because it appears within the type `Move`
+  --> src/lib.rs
+   |
+   | pub struct Move;
+   |            ^^^^
+   = note: required for `*const Move` to implement `CoerceUnsized<*const dyn munge::__macro::MustBeBorrow>`
+   = note: required for the cast from `*const Move` to `*const dyn munge::__macro::MustBeBorrow`
 
 error[E0277]: munge may not destructure a rest pattern by move
   --> tests/ui/rest_patterns_ref_only.rs:25:25
@@ -13,5 +19,11 @@ error[E0277]: munge may not destructure a rest pattern by move
 25 |     munge!(let Tuple(a, ..) = mu);
    |                         ^^ this rest pattern requires destructuring by borrow
    |
-   = help: the trait `MustBeBorrow` is not implemented for `Move`
-   = note: required for the cast from `&Move` to `&dyn MustBeBorrow`
+   = help: within `Move`, the trait `munge::__macro::MustBeBorrow` is not implemented for `Move`
+note: required because it appears within the type `Move`
+  --> src/lib.rs
+   |
+   | pub struct Move;
+   |            ^^^^
+   = note: required for `*const Move` to implement `CoerceUnsized<*const dyn munge::__macro::MustBeBorrow>`
+   = note: required for the cast from `*const Move` to `*const dyn munge::__macro::MustBeBorrow`
